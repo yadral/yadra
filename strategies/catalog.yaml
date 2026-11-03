@@ -1,0 +1,344 @@
+# Catalogue strategies Yadra — source de vérité interne (pas de lien externe).
+# A · COMPRENDRE : déduction → ## strategies dans .compact.ksl (B matérialise seulement).
+version: 1
+
+# Règles de fusion (agent A → ## strategies du compact) :
+# 1. Questions utilisateur si plusieurs options plausibles.
+# 2. Signaux when → ajout si pas déjà présent (même name).
+# 3. Nom hors catalogue autorisé avec description longue (custom) — préférer les noms ci-dessous.
+
+strategies:
+  # ─── Architecture & baseline (exemples minimal/) ─────────────────────────
+  - id: hexagonal
+    name: "Hexagonal"
+    role: architecture
+    family: architecture
+    skeleton: "ksl/hexagonal.strategy.ksl"
+    profile: "tontine"
+    requires: ["Populator/Converter"]
+    when:
+      outputs_kinds_any: [code]
+    description_hint: |
+      Domain and use cases in modules/<domain>; ports/adapters for REST, persistence, messaging.
+      Cite paths under PROJECT_HOME and KSL output_paths.spec.
+
+  - id: validator
+    name: "Validator"
+    role: pattern
+    family: domain
+    skeleton: "ksl/validator.strategy.ksl"
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [validation, invariant, boundary, reject]
+    description_hint: |
+      Validate inbound forms/commands against constraints stated in this spec (usecases, strategy
+      description, openapi). Reject before persistence or external calls; trace rules to KSL.
+
+  - id: fluent-case-test
+    name: "FluentCaseTest"
+    role: testing
+    family: testing
+    skeleton: "ksl/fluent-case-test.strategy.ksl"
+    profile: "tontine"
+    requires: ["Hexagonal"]
+    when:
+      outputs_kinds_any: [tests]
+      signals_any: [usecase, given, when, then]
+    description_hint: |
+      Write each Given/When/Then scenario once; bind it to unit and integration Testers.
+      No mocks: real services, in-memory ports for UT, isolated real engines for IT.
+      Isolation is inferred from spec data/messaging via a shared IsolationHarness
+      (project mechanism such as Testcontainers — not a KSL test-container block).
+
+  # ─── Principes de conception (guidelines — pas des GoF) ───────────────────
+  # role = "architecture" : contraintes transverses sur le code produit (T2).
+  # En spec : une strategy par principe retenu, description = comment l'appliquer sur CETTE feature.
+
+  - id: solid
+    name: "SOLID"
+    role: architecture
+    family: principles
+    skeleton: "ksl/solid.strategy.ksl"
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [solid, srp, ocp, lsp, isp, dip, coupling, cohesion, interface]
+    description_hint: |
+      Single responsibility, Open-closed, Liskov, Interface segregation, Dependency inversion.
+      State which letters matter for this feature (e.g. S+D for use cases + ports).
+
+  - id: diy
+    name: "DIY"
+    role: architecture
+    family: principles
+    skeleton: "ksl/diy.strategy.ksl"
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [diy, explicit, manual, wiring, framework-free, simple, minimal]
+    description_hint: |
+      Do It Yourself — prefer explicit project code over hidden magic: hand-wired adapters,
+      readable flow, minimal indirection unless a catalogue pattern (e.g. Outbox) applies.
+
+  - id: dry
+    name: "DRY"
+    role: pattern
+    family: principles
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [dry, duplicate, repetition, shared, reuse]
+    description_hint: |
+      Don't Repeat Yourself — extract shared rules once (domain services, validators, mappers);
+      do not deduplicate prematurely across bounded contexts.
+
+  - id: kiss
+    name: "KISS"
+    role: architecture
+    family: principles
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [kiss, simple, minimal, yagni]
+    description_hint: |
+      Keep the smallest structure that satisfies scope; defer patterns not required by outputs or intention.
+
+  - id: yagni
+    name: "YAGNI"
+    role: architecture
+    family: principles
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [yagni, scope, excluded, minimal]
+    description_hint: |
+      Align with scope.excluded — no speculative APIs, tables, or patterns for future features.
+
+  # ─── Mapping (pattern composite unique) ───────────────────────────────────
+  - id: populator-converter
+    name: "Populator/Converter"
+    role: pattern
+    family: mapping
+    skeleton: "ksl/populator-converter.strategy.ksl"
+    profile: "tontine"
+    requires: ["Hexagonal"]
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [dto, api, rest, response, request, mapping, populator, converter, graphql]
+    description_hint: |
+      Converter: transform A→B at layer boundaries. Populator: fill target objects from sources.
+      Apply together in application layer; no entity types in API models.
+
+  # ─── Persistence & integration (T2-oriented names) ────────────────────────
+  - id: transactional-outbox
+    name: "TransactionalOutbox"
+    role: pattern
+    family: messaging
+    skeleton: "ksl/transactional-outbox.strategy.ksl"
+    profile: "tontine"
+    when:
+      outputs_kinds_any: [code, data]
+      signals_any: [outbox, async, event, kafka, messaging]
+    description_hint: |
+      Persist outbound events in outbox table within the same DB transaction as domain write;
+      relay asynchronously to spec messaging topic. Spec alias "Outbox" → this canonical name.
+
+  - id: graphql-stream
+    name: "GraphQLStream"
+    role: pattern
+    family: api
+    skeleton: "ksl/graphql-stream.strategy.ksl"
+    when:
+      signals_any: [graphql, subscription, stream, reactive]
+      outputs_kinds_any: [code]
+    description_hint: |
+      Subscriptions or incremental stream delivery; backpressure with stack runtime (e.g. Reactor).
+
+  - id: cronjob
+    name: "Cronjob"
+    role: pattern
+    family: scheduling
+    skeleton: "ksl/cronjob.strategy.ksl"
+    profile: "multiflex"
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [cron, scheduled, job, recurring, batch, jobrunr, maintenance]
+    description_hint: |
+      Declarative scheduled jobs (cron or one-shot): registrar at startup, config-driven enable/cron,
+      executor with retries; executable method delegates to use case — not business logic in executor.
+
+  - id: saga-transaction
+    name: "SagaTransaction"
+    role: pattern
+    family: orchestration
+    skeleton: "ksl/saga-transaction.strategy.ksl"
+    profile: "multiflex"
+    when:
+      outputs_kinds_any: [code]
+      signals_any: [saga, compensation, rollback, orchestration, multi-step, reactive transaction]
+    description_hint: |
+      Ordered saga steps with forward action and backward compensation; transactional boundaries per
+      step when spec requires; orchestrator scoped per execution — map steps to KSL usecase when list.
+
+  # ─── Design patterns (noms canoniques — descriptions à contextualiser en B) ─
+  - id: factory-method
+    name: "Factory Method"
+    role: pattern
+    family: creational
+    skeleton: "ksl/factory-method.strategy.ksl"
+  - id: abstract-factory
+    name: "Abstract Factory"
+    role: pattern
+    family: creational
+    skeleton: "ksl/abstract-factory.strategy.ksl"
+  - id: builder
+    name: "Builder"
+    role: pattern
+    family: creational
+    skeleton: "ksl/builder.strategy.ksl"
+  - id: prototype
+    name: "Prototype"
+    role: pattern
+    family: creational
+    skeleton: "ksl/prototype.strategy.ksl"
+  - id: singleton
+    name: "Singleton"
+    role: pattern
+    family: creational
+    skeleton: "ksl/singleton.strategy.ksl"
+  - id: adapter
+    name: "Adapter"
+    role: pattern
+    family: structural
+    skeleton: "ksl/adapter.strategy.ksl"
+    when:
+      signals_any: [integration, external, legacy, adapter]
+  - id: bridge
+    name: "Bridge"
+    role: pattern
+    family: structural
+    skeleton: "ksl/bridge.strategy.ksl"
+  - id: composite
+    name: "Composite"
+    role: pattern
+    family: structural
+    skeleton: "ksl/composite.strategy.ksl"
+  - id: decorator
+    name: "Decorator"
+    role: pattern
+    family: structural
+    skeleton: "ksl/decorator.strategy.ksl"
+  - id: facade
+    name: "Facade"
+    role: pattern
+    family: structural
+    skeleton: "ksl/facade.strategy.ksl"
+  - id: flyweight
+    name: "Flyweight"
+    role: pattern
+    family: structural
+    skeleton: "ksl/flyweight.strategy.ksl"
+  - id: proxy
+    name: "Proxy"
+    role: pattern
+    family: structural
+    skeleton: "ksl/proxy.strategy.ksl"
+  - id: chain-of-responsibility
+    name: "Chain of Responsibility"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/chain-of-responsibility.strategy.ksl"
+  - id: command
+    name: "Command"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/command.strategy.ksl"
+  - id: iterator
+    name: "Iterator"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/iterator.strategy.ksl"
+  - id: mediator
+    name: "Mediator"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/mediator.strategy.ksl"
+  - id: memento
+    name: "Memento"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/memento.strategy.ksl"
+  - id: observer
+    name: "Observer"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/observer.strategy.ksl"
+  - id: state
+    name: "State"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/state.strategy.ksl"
+  - id: strategy-pattern
+    name: "Strategy"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/strategy-pattern.strategy.ksl"
+    description_hint: |
+      GoF Strategy — interchangeable algorithms behind a common interface (not the KSL block name).
+  - id: template-method
+    name: "Template Method"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/template-method.strategy.ksl"
+  - id: visitor
+    name: "Visitor"
+    role: pattern
+    family: behavioral
+    skeleton: "ksl/visitor.strategy.ksl"
+
+  # ─── Async request-reply (variantes — une strategy par variante) ───────────
+  - id: async-reply-correlation
+    name: "AsyncRequestReply-Correlation"
+    role: pattern
+    family: async
+    skeleton: "ksl/async-reply-correlation.strategy.ksl"
+    when:
+      signals_any: [async, correlation, 202, callback]
+    description_hint: |
+      HTTP 202 (or equivalent) with stable correlation id; client polls or uses optional callback.
+  - id: async-fire-and-forget
+    name: "AsyncRequest-FireAndForget"
+    role: pattern
+    family: async
+    skeleton: "ksl/async-fire-and-forget.strategy.ksl"
+    description_hint: |
+      Fast technical ack; no business reply — queue, topic, or internal bus.
+  - id: async-webhook-callback
+    name: "AsyncRequest-WebhookCallback"
+    role: pattern
+    family: async
+    skeleton: "ksl/async-webhook-callback.strategy.ksl"
+    when:
+      signals_any: [webhook, callback]
+    description_hint: |
+      POST result to client callback URL; retries and signing per spec.
+  - id: async-polling-status
+    name: "AsyncRequest-PollingStatus"
+    role: pattern
+    family: async
+    skeleton: "ksl/async-polling-status.strategy.ksl"
+    when:
+      signals_any: [polling, status]
+    description_hint: |
+      Job/task resource with GET status until terminal state after async accept.
+  - id: async-message-reply
+    name: "AsyncRequest-MessageReply"
+    role: pattern
+    family: async
+    skeleton: "ksl/async-message-reply.strategy.ksl"
+    when:
+      signals_any: [queue, kafka, rabbit, sqs]
+    description_hint: |
+      Request and reply messages correlated via broker headers or reply-to destination.
+  - id: async-sync-fallback
+    name: "AsyncRequest-SyncFallback"
+    role: pattern
+    family: async
+    skeleton: "ksl/async-sync-fallback.strategy.ksl"
+    description_hint: |
+      Try sync within SLA; escalate to another AsyncRequest-* variant on timeout or overload.

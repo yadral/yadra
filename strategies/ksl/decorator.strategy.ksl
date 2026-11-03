@@ -1,0 +1,97 @@
+strategy_skeleton 1.0
+
+strategy "Decorator" {
+  id = "decorator"
+  family = "structural"
+  implementation_language = "project"
+
+  intent {
+    """
+    Ajouter des responsabilités à un objet dynamiquement en enveloppant le
+    composant de base, sans modifier sa classe.
+    """
+  }
+
+  applicability {
+    signals = ["optional behavior layers", "cross-cutting wrap", "stackable features"]
+  }
+
+  participants {
+    participant "Component" {
+      kind = "contract"
+      responsibility = "Interface commune au core et aux décorateurs."
+    }
+    participant "ConcreteComponent" {
+      kind = "core"
+      responsibility = "Comportement de base."
+    }
+    participant "Decorator" {
+      kind = "wrapper_base"
+      responsibility = "Implémente Component ; délègue au composant wrappé."
+    }
+    participant "ConcreteDecorator" {
+      kind = "wrapper"
+      multiplicity = "one_or_more"
+      responsibility = "Ajoute un comportement avant/après délégation."
+    }
+  }
+
+  relations {
+    relation "ConcreteComponent" -> "Component" { type = "implements" }
+    relation "Decorator" -> "Component" { type = "implements" }
+    relation "Decorator" -> "Component" { type = "wraps" }
+    relation "ConcreteDecorator" -> "Decorator" { type = "extends" }
+  }
+
+  algorithm {
+    step 1 { action = "ConcreteDecorator reçoit Component wrappé." }
+    step 2 { action = "Exécuter comportement ajouté (before)." }
+    step 3 { action = "Déléguer au wrappé." }
+    step 4 { action = "Exécuter comportement ajouté (after) si applicable." }
+  }
+
+  generation {
+    required = ["Component", "ConcreteComponent", "Decorator", "ConcreteDecorator"]
+    optional = ["ordering policy when stacking"]
+    forbidden = [
+      "Modifier ConcreteComponent pour chaque variante",
+      "Casser le contrat Component dans un décorateur",
+      "Cycles de wrapping"
+    ]
+  }
+
+  tests {
+    assertion "transparency" {
+      verifies = "Client traite Decorator et ConcreteComponent via Component."
+    }
+    assertion "layering" {
+      verifies = "L'ordre des décorateurs produit l'effet documenté."
+    }
+  }
+
+  composition {
+    compatible = ["Proxy", "Adapter", "Chain of Responsibility"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.infrastructure.secondary.payment;
+
+@RequiredArgsConstructor
+public class AuditedPaymentGateway implements PaymentGatewaySpi {
+  private final PaymentGatewaySpi delegate;
+  private final PaymentAuditLogger auditLogger;
+
+  @Override
+  public AuthorizationResult authorize(PaymentCommand command) {
+    auditLogger.logAttempt(command);
+    AuthorizationResult result = delegate.authorize(command);
+    auditLogger.logResult(command, result);
+    return result;
+  }
+}
+      """
+    }
+  }
+}

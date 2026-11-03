@@ -1,0 +1,102 @@
+strategy_skeleton 1.0
+
+strategy "Factory Method" {
+  id = "factory-method"
+  family = "creational"
+  implementation_language = "project"
+
+  intent {
+    """
+    Séparer la décision de création d'un produit de son utilisation, en laissant
+    une implémentation spécialisée sélectionner le produit concret.
+    """
+  }
+
+  applicability {
+    signals = ["creation varies", "runtime selection", "subclass extension", "product family"]
+  }
+
+  participants {
+    participant "Product" {
+      kind = "contract"
+      responsibility = "Définit le comportement consommé après création."
+    }
+    participant "ConcreteProduct" {
+      kind = "implementation"
+      multiplicity = "one_or_more"
+      responsibility = "Implémente Product pour une variante donnée."
+    }
+    participant "Creator" {
+      kind = "creation_owner"
+      responsibility = "Déclare factoryMethod et utilise uniquement Product."
+    }
+    participant "ConcreteCreator" {
+      kind = "specialization"
+      multiplicity = "one_or_more"
+      responsibility = "Retourne le ConcreteProduct adapté au contexte."
+    }
+  }
+
+  relations {
+    relation "ConcreteProduct" -> "Product" { type = "implements" }
+    relation "Creator" -> "Product" { type = "creates_and_uses" }
+    relation "ConcreteCreator" -> "Creator" { type = "specializes" }
+    relation "ConcreteCreator" -> "ConcreteProduct" { type = "creates" }
+  }
+
+  algorithm {
+    step 1 { action = "Creator déclenche factoryMethod au point de variation." }
+    step 2 { action = "ConcreteCreator choisit et construit ConcreteProduct." }
+    step 3 { action = "Creator poursuit le flux via le contrat Product." }
+  }
+
+  generation {
+    required = ["Product", "Creator.factoryMethod", "ConcreteProduct", "ConcreteCreator"]
+    optional = ["creation parameters", "default creator"]
+    forbidden = [
+      "Instancier ConcreteProduct dans le code client",
+      "Retourner un type concret depuis factoryMethod",
+      "Mélanger sélection du produit et logique métier du produit"
+    ]
+  }
+
+  tests {
+    assertion "selection" {
+      verifies = "Chaque ConcreteCreator retourne la variante Product attendue."
+    }
+    assertion "substitution" {
+      verifies = "Creator fonctionne avec toute implémentation Product."
+    }
+  }
+
+  composition {
+    compatible = ["Abstract Factory", "Template Method", "Prototype"]
+  }
+
+  examples {
+    java {
+      """
+// outputs.docs · reçu client checkout
+
+package <basePackage>.domain.converter.receipt;
+
+public abstract class OrderReceiptExporter {
+  public final byte[] export(OrderReceipt receipt) {
+    ReceiptWriter writer = createWriter();
+    return writer.write(receipt);
+  }
+
+  protected abstract ReceiptWriter createWriter();
+}
+
+@Component
+public class JsonOrderReceiptExporter extends OrderReceiptExporter {
+  @Override
+  protected ReceiptWriter createWriter() {
+    return new JsonReceiptWriter();
+  }
+}
+      """
+    }
+  }
+}

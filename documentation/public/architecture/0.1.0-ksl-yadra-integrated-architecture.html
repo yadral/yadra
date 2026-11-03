@@ -1,0 +1,1296 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yadra — Architecture Industrielle du Spec-to-Code Binder</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --blue: #0284c7;
+      --blue-light: #f0f9ff;
+      --indigo: #4f46e5;
+      --indigo-light: #eef2ff;
+      --violet: #7c3aed;
+      --violet-light: #f5f3ff;
+      --amber: #d97706;
+      --amber-light: #fffbeb;
+      --emerald: #059669;
+      --emerald-light: #ecfdf5;
+      --rose: #e11d48;
+      --rose-light: #fff1f2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      width: min(1560px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 64px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 3.2vw, 2.85rem);
+      font-weight: 850;
+      letter-spacing: -0.035em;
+      color: #0f172a;
+    }
+    header p {
+      max-width: 980px;
+      margin: 0 auto;
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
+    .board-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 20px 45px -15px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+      margin-bottom: 40px;
+    }
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    
+    /* Section 2 : Les 4 grandes ruptures */
+    .ruptures-wrapper {
+      margin-top: 48px;
+    }
+    .ruptures-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .ruptures-header h2 {
+      margin: 0 0 10px;
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      color: #0f172a;
+    }
+    .ruptures-header p {
+      max-width: 820px;
+      margin: 0 auto;
+      color: var(--text-muted);
+      font-size: 1rem;
+      line-height: 1.55;
+    }
+    .ruptures-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+    .rupture-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+      display: flex;
+      flex-direction: column;
+    }
+    .rupture-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 750;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+      align-self: flex-start;
+    }
+    .rupture-card h3 {
+      margin: 0 0 12px;
+      font-size: 1.15rem;
+      font-weight: 750;
+      color: #0f172a;
+      line-height: 1.4;
+    }
+    .rupture-block {
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    .block-market {
+      background: #f8fafc;
+      border-left: 3px solid #94a3b8;
+      color: #475569;
+    }
+    .block-yadra {
+      background: #f5f3ff;
+      border-left: 3px solid #7c3aed;
+      color: #3b0764;
+      font-weight: 500;
+    }
+    .block-label {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .block-market .block-label { color: #64748b; }
+    .block-yadra .block-label { color: #7c3aed; }
+
+    /* Comparison Table */
+    .table-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+      overflow-x: auto;
+    }
+    .table-card h3 {
+      margin: 0 0 16px;
+      font-size: 1.2rem;
+      font-weight: 750;
+      color: #0f172a;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.88rem;
+    }
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+      padding: 12px 16px;
+      border-bottom: 2px solid var(--border);
+    }
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      line-height: 1.5;
+    }
+    tr:last-child td { border-bottom: none; }
+    .yadra-col {
+      background: #fdfcff;
+      font-weight: 600;
+      color: #4c1d95;
+    }
+    th.yadra-th {
+      background: #ede9fe;
+      color: #5b21b6;
+    }
+    .flow-wrapper { margin: 48px 0 8px; }
+    .flow-header { text-align: center; margin-bottom: 20px; }
+    .flow-header h2 {
+      margin: 0 0 10px;
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+    }
+    .flow-header p {
+      max-width: 880px;
+      margin: 0 auto;
+      color: var(--text-muted);
+      font-size: 1rem;
+      line-height: 1.55;
+    }
+    .flow-legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px 18px;
+      margin: 0 0 16px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #475569;
+    }
+    .flow-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .flow-swatch { width: 22px; height: 3px; border-radius: 2px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Yadra — Spec-to-Code Binder</h1>
+      <p><strong>Yadra lie le code à la spec KSL scellée</strong>. La spec <strong>est</strong> le document de la feature — pas une pile de <code>.md</code> obsolètes : elle se met à jour quand la feature évolue ; un upgrade majeur ouvre une <strong>nouvelle spec</strong>. Architecture à <strong>Deux Timelines</strong> : l’KSL est <strong>l'unique porte d'entrée</strong> vers le code cible. Le cœur Yadra instancie un <strong>Modèle IA dédié et spécifié par requête</strong>, branché au contexte projet par <strong>l’KSL et les SKILLS</strong>, et certifié par une conformité formelle étanche.</p>
+    </header>
+
+    <div class="board-card" style="padding: 20px 24px; margin-bottom: 24px;" role="note" aria-label="Triade Comprendre Produire Livrer · CLI 0.1.8">
+      <h2 style="margin: 0 0 12px; font-size: 1.15rem; color: #047857;">Triade · COMPRENDRE → PRODUIRE → LIVRER (CLI 0.1.8)</h2>
+      <p style="margin: 0 0 10px; color: var(--text-muted); font-size: 0.95rem; line-height: 1.55;">
+        Le SVG ci-dessous a été aligné sur <strong>LIVRER</strong> (plus « EXÉCUTER »). En T2, la <strong>boucle qualité</strong> (Gradle + repair) vit dans
+        <strong>B · PRODUIRE</strong> (<code>yadra execute</code>) ; <strong>C · LIVRER</strong> = scellement T1 ou <strong>Gate</strong> T2 (<code>yadra gate</code>).
+        <strong>C · LIVRER n’est pas « 100&nbsp;% sans IA »</strong> : SKILL + plan, et <code>gate --produce</code> (docs/e2e). Les <strong>oracles</strong> (validate, digest seal, verdict Gate) restent des fonctions CLI <strong>déterministes</strong>, découplées du LLM producteur (B / <code>--produce</code>).
+      </p>
+      <ul style="margin: 0; padding-left: 1.25rem; color: var(--text-main); font-size: 0.92rem; line-height: 1.6;">
+        <li><strong>A · COMPRENDRE</strong> — <code>yadra plan</code> ; spécialisation embarquée dans <code>execute</code>.</li>
+        <li><strong>B · PRODUIRE</strong> — <code>yadra execute</code> · <code>phase.execute</code> · boucle sandbox/repair (<code>budget</code>) → <code>PROJECT_HOME</code>.</li>
+        <li><strong>C · LIVRER</strong> — T1 : <code>validate</code> + <code>seal</code> ; T2 : <code>yadra gate</code> · <code>phase.gate</code> · bundle + verdict Conformance Gate.</li>
+        <li><strong>Stack T2</strong> — langage/build dans <code>root.project.ksl</code> ; <code>yadra execute</code> matérialise sous <code>PROJECT_HOME</code> (pas un repo Java/Kotlin « externe » imposé).</li>
+      </ul>
+      <p style="margin: 12px 0 0; font-size: 0.85rem; color: var(--text-muted);">
+        Doc site : page <em>Architecture</em> · Plans t2-produire v4 · t2-comprendre v5 · KSL <code>outputs.md</code>.
+      </p>
+    </div>
+
+    <div class="board-card" role="region" aria-label="Architecture de référence Yadra">
+      <svg viewBox="0 0 1560 1340" width="1560" height="1340" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <!-- Gradients -->
+          <linearGradient id="g-yadra" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="100%" stop-color="#fcfdff"/>
+          </linearGradient>
+          <linearGradient id="g-ai" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#ede9fe"/>
+            <stop offset="100%" stop-color="#f3e8ff"/>
+          </linearGradient>
+          <linearGradient id="g-snapshot" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#e0e7ff"/>
+            <stop offset="100%" stop-color="#ede9fe"/>
+          </linearGradient>
+          <linearGradient id="g-verified" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#ecfdf5"/>
+            <stop offset="100%" stop-color="#d1fae5"/>
+          </linearGradient>
+
+          <!-- Drop Shadows -->
+          <filter id="shadow-sm" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.04"/>
+          </filter>
+          <filter id="shadow-md" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.07"/>
+          </filter>
+
+          <!-- Markers -->
+          <marker id="m-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#0284c7"/>
+          </marker>
+          <marker id="m-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#4f46e5"/>
+          </marker>
+          <marker id="m-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#7c3aed"/>
+          </marker>
+          <marker id="m-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#d97706"/>
+          </marker>
+          <marker id="m-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#059669"/>
+          </marker>
+          <marker id="m-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#e11d48"/>
+          </marker>
+
+          <!-- Styles -->
+          <style>
+            .font-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 800; }
+            .font-heading { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 700; }
+            .font-sub { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 600; }
+            .font-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 400; }
+            .font-mono { font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace; font-weight: 600; }
+            .badge-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 10px; font-weight: 750; letter-spacing: 0.05em; text-transform: uppercase; }
+          </style>
+        </defs>
+
+        <!-- Canvas Background -->
+        <rect width="1560" height="1340" fill="#f8fafc"/>
+
+        <!-- Top Header Status -->
+        <text x="40" y="26" class="badge-txt" fill="#64748b">ARCHITECTURE INDUSTRIELLE YADRA · DEUX TIMELINES SÉPARÉES · Le KSL EST LA SEULE PORTE VERS LE CODE</text>
+        <rect x="1200" y="10" width="320" height="24" rx="12" fill="#ecfdf5" stroke="#a7f3d0"/>
+        <text x="1360" y="26" text-anchor="middle" class="badge-txt" fill="#065f46">MODÈLE IA DÉDIÉ PAR REQUÊTE · CYCLE SCELLÉ</text>
+
+        <!-- ========================================================================= -->
+        <!-- TIMELINE 1 : INTENTION MÉTIER ──► SPÉCIFICATIONS FORMELLES KSL            -->
+        <!-- ========================================================================= -->
+        <g transform="translate(40, 42)">
+          <!-- Container Timeline 1 -->
+          <rect width="1480" height="424" rx="16" fill="#ffffff" stroke="#bae6fd" stroke-width="1.8" filter="url(#shadow-sm)"/>
+          
+          <!-- Header Timeline 1 -->
+          <rect width="1480" height="42" rx="16" fill="#f0f9ff"/>
+          <rect y="30" width="1480" height="12" fill="#f0f9ff"/>
+          <line x1="0" y1="42" x2="1480" y2="42" stroke="#bae6fd" stroke-width="1"/>
+
+          <rect x="14" y="10" width="22" height="22" rx="6" fill="#0284c7"/>
+          <text x="25" y="25" text-anchor="middle" class="font-title" font-size="12" fill="#ffffff">1</text>
+          <text x="44" y="26" class="font-heading" font-size="14.5" fill="#0369a1">TIMELINE 1 : INTENTION MÉTIER ──► SPÉCIFICATIONS FORMELLES KSL</text>
+          <text x="590" y="26" class="font-body" font-size="11.5" fill="#0284c7">— Distillation et formalisation en contrats vérifiés (L'intention métier intègre l'KSL existant)</text>
+
+          <rect x="1250" y="10" width="216" height="22" rx="11" fill="#e0f2fe"/>
+          <text x="1358" y="24" text-anchor="middle" class="badge-txt" fill="#0369a1">PASSE 1 · FORMALISATION KSL</text>
+
+          <!-- 1.1 INPUTS T1 (x=16, y=52, width=276, height=358) -->
+          <g transform="translate(16, 52)">
+            <rect width="276" height="358" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+            <rect width="276" height="30" rx="12" fill="#f1f5f9"/>
+            <rect y="20" width="276" height="10" fill="#f1f5f9"/>
+            <text x="12" y="20" class="badge-txt" fill="#334155">1.1 INPUTS CONJOINTS DE SPÉCIFICATION</text>
+
+            <!-- Card 1: Doc First -->
+            <g transform="translate(10, 36)">
+              <rect width="256" height="138" rx="8" fill="#ffffff" stroke="#93c5fd" stroke-width="1.2"/>
+              <rect x="8" y="8" width="90" height="18" rx="4" fill="#e0f2fe"/>
+              <text x="53" y="21" text-anchor="middle" class="badge-txt" fill="#0369a1">DOC FIRST</text>
+              <text x="10" y="42" class="font-heading" font-size="12" fill="#0f172a">Intentions Métier Informelles</text>
+              <text x="10" y="60" class="font-body" font-size="10.5" fill="#475569">• Tickets Jira (.md / User Stories)</text>
+              <text x="10" y="76" class="font-body" font-size="10.5" fill="#475569">• Exigences &amp; cas limites métier</text>
+              <text x="10" y="92" class="font-body" font-size="10.5" fill="#475569">• Prompts &amp; règles en langage naturel</text>
+              <rect x="8" y="106" width="240" height="24" rx="4" fill="#f0f9ff"/>
+              <text x="128" y="122" text-anchor="middle" class="badge-txt" fill="#0284c7">LANGAGE NATUREL · NON DÉTERMINISTE</text>
+            </g>
+
+            <!-- Liaison conjointe -->
+            <rect x="14" y="180" width="248" height="18" rx="9" fill="#ede9fe" stroke="#c4b5fd"/>
+            <text x="138" y="193" text-anchor="middle" class="badge-txt" font-size="8.5" fill="#6d28d9">🔗 ENTRÉE CONJOINTE (LORSQU'IL EXISTE) :</text>
+
+            <!-- Card 2: KSL Existant -->
+            <g transform="translate(10, 204)">
+              <rect width="256" height="142" rx="8" fill="#faf5ff" stroke="#c4b5fd" stroke-width="1.2"/>
+              <rect x="8" y="8" width="104" height="18" rx="4" fill="#ede9fe"/>
+              <text x="60" y="21" text-anchor="middle" class="badge-txt" fill="#6d28d9">KSL EXISTANT</text>
+              <text x="10" y="42" class="font-heading" font-size="12" fill="#4c1d95">Architecture &amp; Contrats Déjà Figés</text>
+              <text x="10" y="58" class="font-mono" font-size="9.5" fill="#6d28d9">• .project.ksl (modules &amp; dépendances)</text>
+              <text x="10" y="74" class="font-mono" font-size="9.5" fill="#6d28d9">• .spec.ksl (types &amp; schémas validés)</text>
+
+              <rect x="8" y="88" width="240" height="46" rx="6" fill="#ffffff" stroke="#ddd6fe"/>
+              <text x="14" y="103" class="font-sub" font-size="9" fill="#5b21b6">Levier d'efficacité majeur :</text>
+              <text x="14" y="117" class="font-body" font-size="8.5" fill="#6d28d9">L'intention s'ancre sur l'architecture existante</text>
+              <text x="14" y="128" class="font-body" font-size="8.5" fill="#6d28d9">sans réinventer les briques déjà stabilisées.</text>
+            </g>
+          </g>
+
+          <!-- Flèche Inputs T1 -> Yadra Stage A -->
+          <line x1="294" y1="230" x2="318" y2="230" stroke="#0284c7" stroke-width="2.5" marker-end="url(#m-blue)"/>
+
+          <!-- 1.2 YADRA-EXECUTOR T1 (x=320, y=52, width=816, height=358) -->
+          <g transform="translate(320, 52)">
+            <rect width="816" height="358" rx="14" fill="url(#g-yadra)" stroke="#c7d2fe" stroke-width="1.5"/>
+            <rect width="816" height="32" rx="14" fill="#eef2ff"/>
+            <rect y="20" width="816" height="12" fill="#eef2ff"/>
+            <text x="14" y="21" class="font-heading" font-size="13" fill="#312e81">YADRA-EXECUTOR — Instance T1 : Compilateur de Spécifications KSL</text>
+
+            <!-- Dedicated AI Model Lane T1 -->
+            <g transform="translate(10, 36)">
+              <rect width="796" height="32" rx="8" fill="url(#g-ai)" stroke="#a855f7" stroke-width="1.2"/>
+              <rect x="6" y="4" width="144" height="24" rx="6" fill="#7e22ce"/>
+              <text x="78" y="20" text-anchor="middle" class="badge-txt" fill="#ffffff">🧠 MODÈLE IA DÉDIÉ</text>
+              <text x="160" y="20" class="font-heading" font-size="11" fill="#4a044e">Spécifié par Requête</text>
+              <text x="286" y="20" class="font-body" font-size="9.5" fill="#7e22ce">Provider alloué à la demande (Claude, GPT, Local) ──► injecté dans A &amp; B</text>
+              <rect x="680" y="4" width="110" height="24" rx="6" fill="#ffffff" stroke="#c084fc"/>
+              <text x="735" y="20" text-anchor="middle" class="badge-txt" fill="#7e22ce">1 REQ = 1 INST</text>
+            </g>
+
+            <!-- EN-TÊTE BOUCLE D'INGÉNIERIE T1 -->
+            <g transform="translate(10, 72)">
+              <rect width="796" height="24" rx="12" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.2"/>
+              <text x="20" y="16" font-size="11">🔄</text>
+              <text x="36" y="16" class="badge-txt" font-size="9.5" fill="#5b21b6">BOUCLE D'INGÉNIERIE FORMELLE ITÉRATIVE · [ A · COMPRENDRE ➔ B · PRODUIRE ➔ C · LIVRER ]</text>
+              <rect x="680" y="2" width="112" height="20" rx="10" fill="#ffffff" stroke="#a78bfa"/>
+              <text x="736" y="16" text-anchor="middle" class="badge-txt" font-size="8.5" fill="#6d28d9">ARRÊT MONOTONE</text>
+            </g>
+
+            <!-- Stage A · COMPRENDRE T1 (x=10, w=238) -->
+            <g transform="translate(10, 100)">
+              <rect width="238" height="216" rx="10" fill="#ffffff" stroke="#818cf8" stroke-width="1.5" filter="url(#shadow-sm)"/>
+              <rect width="238" height="28" rx="10" fill="#e0e7ff"/>
+              <rect y="18" width="238" height="10" fill="#e0e7ff"/>
+              <text x="12" y="19" class="font-heading" font-size="12" fill="#3730a3">A · COMPRENDRE</text>
+
+              <!-- Contexte Projet Branchement -->
+              <rect x="8" y="32" width="222" height="58" rx="6" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.2"/>
+              <text x="14" y="46" class="font-heading" font-size="10" fill="#5b21b6">🔗 ANCRAGE CONTEXTE PROJET</text>
+              <text x="14" y="60" class="font-body" font-size="9" fill="#6d28d9">• Contrats KSL existants du projet</text>
+              <text x="14" y="74" class="font-body" font-size="9" fill="#6d28d9">• SKILLS du projet (règles métier)</text>
+
+              <text x="10" y="104" class="font-body" font-size="9" fill="#475569">• Analyse intentions Doc First</text>
+              <text x="10" y="118" class="font-body" font-size="9" fill="#475569">• Résolution d'ambiguïté par le modèle</text>
+              <text x="10" y="132" class="font-body" font-size="9" fill="#475569">• Prompting ciblé du modèle IA</text>
+              <text x="10" y="146" class="font-body" font-size="9" fill="#475569">• Alignement formel aux SKILLS</text>
+
+              <!-- Garde-fou ambiguïté -->
+              <rect x="8" y="156" width="222" height="52" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+              <text x="119" y="172" text-anchor="middle" class="badge-txt" fill="#b45309">GARDE-FOU AMBIGUÏTÉ MÉTIER</text>
+              <text x="119" y="186" text-anchor="middle" class="font-body" font-size="9" fill="#92400e">Contradiction spec ──► Arrêt immédiat</text>
+              <text x="119" y="198" text-anchor="middle" class="font-body" font-size="8" fill="#b45309">Zéro dérive silencieuse tolérée</text>
+            </g>
+
+            <!-- Transition A -> B (x=248 à 288, width=40) -->
+            <g transform="translate(248, 185)">
+              <line x1="2" y1="16" x2="38" y2="16" stroke="#4f46e5" stroke-width="2.5" marker-end="url(#m-indigo)"/>
+              <rect x="0" y="0" width="40" height="15" rx="4" fill="#ffffff" stroke="#818cf8" stroke-width="1.2" filter="url(#shadow-sm)"/>
+              <text x="20" y="11" text-anchor="middle" class="badge-txt" font-size="8" fill="#3730a3">SPEC ➔</text>
+            </g>
+
+            <!-- Stage B · PRODUIRE T1 (x=288, w=238) -->
+            <g transform="translate(288, 100)">
+              <rect width="238" height="216" rx="10" fill="#ffffff" stroke="#818cf8" stroke-width="1.5" filter="url(#shadow-sm)"/>
+              <rect width="238" height="28" rx="10" fill="#e0e7ff"/>
+              <rect y="18" width="238" height="10" fill="#e0e7ff"/>
+              <text x="12" y="19" class="font-heading" font-size="12" fill="#3730a3">B · PRODUIRE</text>
+
+              <rect x="8" y="32" width="222" height="46" rx="6" fill="#faf5ff" stroke="#d8b4fe"/>
+              <text x="119" y="49" text-anchor="middle" class="font-heading" font-size="10.5" fill="#7e22ce">KSL Synthesizer (Modèle IA)</text>
+              <text x="119" y="64" text-anchor="middle" class="font-body" font-size="8.5" fill="#6b21a8">Synthèse formelle des contrats</text>
+
+              <text x="10" y="94" class="font-body" font-size="9" fill="#475569">• Émission .project.ksl (topologie service)</text>
+              <text x="10" y="109" class="font-body" font-size="9" fill="#475569">• Émission .module.ksl (domaines métier)</text>
+              <text x="10" y="124" class="font-body" font-size="9" fill="#475569">• Émission .spec.ksl (strategies &amp; use cases inline)</text>
+              <text x="10" y="139" class="font-body" font-size="9" fill="#475569">• Structuration des contrats d'interface</text>
+
+              <rect x="8" y="156" width="222" height="52" rx="6" fill="#f5f3ff" stroke="#c4b5fd"/>
+              <text x="119" y="174" text-anchor="middle" class="badge-txt" fill="#6d28d9">SYNTHÈSE FORMELLE MONOTONE</text>
+              <text x="119" y="190" text-anchor="middle" class="font-body" font-size="8.5" fill="#5b21b6">Contrat figé prêt pour vérification</text>
+            </g>
+
+            <!-- Transition B -> C (x=526 à 566, width=40) -->
+            <g transform="translate(526, 185)">
+              <line x1="2" y1="16" x2="38" y2="16" stroke="#059669" stroke-width="2.5" marker-end="url(#m-emerald)"/>
+              <rect x="0" y="0" width="40" height="15" rx="4" fill="#ffffff" stroke="#059669" stroke-width="1.2" filter="url(#shadow-sm)"/>
+              <text x="20" y="11" text-anchor="middle" class="badge-txt" font-size="7.5" fill="#065f46">CHECK ➔</text>
+            </g>
+
+            <!-- Stage C · LIVRER T1 (x=566, w=240) -->
+            <g transform="translate(566, 100)">
+              <rect width="240" height="216" rx="10" fill="#ffffff" stroke="#059669" stroke-width="1.5" filter="url(#shadow-sm)"/>
+              <rect width="240" height="28" rx="10" fill="#d1fae5"/>
+              <rect y="18" width="240" height="10" fill="#d1fae5"/>
+              <text x="12" y="19" class="font-heading" font-size="12" fill="#065f46">C · LIVRER</text>
+
+              <rect x="8" y="32" width="224" height="46" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+              <text x="120" y="49" text-anchor="middle" class="font-heading" font-size="10.5" fill="#0f172a">LIVRER T1 · seal</text>
+              <text x="120" y="64" text-anchor="middle" class="badge-txt" font-size="8" fill="#059669">SKILL C · oracles validate/seal</text>
+
+              <text x="10" y="94" class="font-body" font-size="9" fill="#475569">• Parser strict &amp; type-checking</text>
+              <text x="10" y="109" class="font-body" font-size="9" fill="#475569">• Preuve de consistance invariants</text>
+              <text x="10" y="124" class="font-body" font-size="9" fill="#475569">• Validation cyclique graphe KSL</text>
+              <text x="10" y="139" class="font-body" font-size="9" fill="#475569">• Résolution complète symboles</text>
+
+              <rect x="8" y="156" width="224" height="52" rx="6" fill="#ecfdf5" stroke="#a7f3d0"/>
+              <text x="120" y="174" text-anchor="middle" class="badge-txt" fill="#047857">CONTRAT FORMEL SCELLÉ</text>
+              <text x="120" y="190" text-anchor="middle" class="font-body" font-size="8.5" fill="#065f46">KSL vérifié sans aucune ambiguïté</text>
+            </g>
+
+            <!-- BOUCLE DE RETOUR T1 : C ──► B (Raffinement formel) -->
+            <path d="M 686 316 L 686 332 Q 686 340 674 340 L 418 340 Q 406 340 406 332 L 406 318" 
+                  fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#m-purple)"/>
+            <rect x="424" y="330" width="246" height="18" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.2" filter="url(#shadow-sm)"/>
+            <text x="547" y="343" text-anchor="middle" class="badge-txt" font-size="8" fill="#6d28d9">
+              🔄 BOUCLE : ÉCHEC INVARIANT ──► RAFFINEMENT DANS B
+            </text>
+          </g>
+
+          <!-- Flèche Yadra Stage C -> Outputs T1 -->
+          <line x1="1138" y1="230" x2="1152" y2="230" stroke="#4f46e5" stroke-width="2.5" marker-end="url(#m-indigo)"/>
+
+          <!-- 1.3 OUTPUTS T1 (x=1154, y=52, width=310, height=358) -->
+          <g transform="translate(1154, 52)">
+            <rect width="310" height="358" rx="12" fill="#fcfaff" stroke="#818cf8" stroke-width="1.6"/>
+            <rect width="310" height="30" rx="12" fill="#ede9fe"/>
+            <rect y="20" width="310" height="10" fill="#ede9fe"/>
+            <text x="12" y="20" class="badge-txt" fill="#4338ca">1.3 OUTPUTS T1 : SPÉCIFICATIONS FORMELLES</text>
+
+            <!-- Card KSL Snapshot T1 -->
+            <g transform="translate(10, 36)">
+              <rect width="290" height="162" rx="10" fill="url(#g-snapshot)" stroke="#6366f1" stroke-width="1.5"/>
+              <rect x="8" y="8" width="180" height="20" rx="5" fill="#4f46e5"/>
+              <text x="98" y="22" text-anchor="middle" class="badge-txt" fill="#ffffff">SPÉCIFICATIONS KSL SCELLÉES</text>
+              
+              <text x="12" y="48" class="font-mono" font-size="10.5" fill="#312e81">.project.ksl</text>
+              <text x="92" y="48" class="font-body" font-size="9.5" fill="#475569">— Root, services, stack</text>
+
+              <text x="12" y="70" class="font-mono" font-size="10.5" fill="#312e81">.module.ksl</text>
+              <text x="92" y="70" class="font-body" font-size="9.5" fill="#475569">— Domaines métier &amp; specs portées</text>
+
+              <text x="12" y="92" class="font-mono" font-size="10.5" fill="#312e81">.spec.ksl</text>
+              <text x="80" y="92" class="font-body" font-size="9.5" fill="#475569">— Features + strategies { } inline</text>
+
+              <rect x="8" y="110" width="274" height="42" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
+              <text x="145" y="126" text-anchor="middle" class="badge-txt" fill="#059669">SOURCE UNIQUE DE VÉRITÉ SCELLÉE</text>
+              <text x="145" y="141" text-anchor="middle" class="font-body" font-size="8.5" fill="#475569">Prêt pour la compilation du code cible en Timeline 2</text>
+            </g>
+
+            <!-- Pivot Notice -->
+            <g transform="translate(10, 210)">
+              <rect width="290" height="136" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+              <text x="10" y="22" class="font-heading" font-size="11.5" fill="#0f172a">Goulot d'Étranglement Strict</text>
+              <text x="10" y="42" class="font-body" font-size="9.5" fill="#64748b">• Le KSL est le seul livrable de la Timeline 1</text>
+              <text x="10" y="58" class="font-body" font-size="9.5" fill="#64748b">• Aucun code cible n'est encore produit</text>
+              <text x="10" y="74" class="font-body" font-size="9.5" fill="#64748b">• Dépôts, composants, cibles et budgets</text>
+              <text x="10" y="90" class="font-body" font-size="9.5" fill="#64748b">  sont tous embarqués dans ce contrat</text>
+              <rect x="8" y="104" width="274" height="24" rx="4" fill="#ede9fe"/>
+              <text x="145" y="120" text-anchor="middle" class="badge-txt" fill="#6d28d9">KSL = SEULE PORTE VERS LE CODE</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- ========================================================================= -->
+        <!-- RUBAN CENTRAL PIVOT : Le KSL EST LA SEULE PORTE VERS LE CODE               -->
+        <!-- ========================================================================= -->
+        <g transform="translate(40, 476)">
+          <!-- Ruban sombre de la règle d'or -->
+          <rect width="1480" height="38" rx="19" fill="#1e1b4b" stroke="#6366f1" stroke-width="2" filter="url(#shadow-md)"/>
+          
+          <rect x="14" y="7" width="28" height="24" rx="12" fill="#4f46e5"/>
+          <text x="28" y="23" text-anchor="middle" font-size="12" fill="#ffffff">🔒</text>
+
+          <text x="740" y="24" text-anchor="middle" class="font-heading" font-size="12.5" fill="#ffffff" letter-spacing="0.04em">
+            RÈGLE ARCHITECTURALE FONDAMENTALE : Le KSL EST LA SEULE PORTE UTILISÉE PAR YADRA POUR GÉNÉRER LE CODE DU PROJET CIBLE
+          </text>
+
+          <rect x="1310" y="7" width="156" height="24" rx="12" fill="#4338ca"/>
+          <text x="1388" y="23" text-anchor="middle" class="badge-txt" fill="#ffffff">PASSE 1 ──► PASSE 2</text>
+        </g>
+
+        <!-- BANDEAU DE TRANSFERT DU CONTRAT KSL FIGÉ (T1 ──► T2) -->
+        <g transform="translate(40, 520)">
+          <!-- Bandeau de liaison spacieux et parfaitement lisible -->
+          <rect x="130" y="0" width="1220" height="36" rx="18" fill="#eef2ff" stroke="#6366f1" stroke-width="1.6"/>
+          
+          <!-- Flèche descendante : départ sous le badge PASSE 1 -> PASSE 2 (x=1388), entre dans le bandeau à droite, sort à gauche vers 2.1 Inputs T2 (x=154) -->
+          <path d="M 1388 -6 L 1388 18 L 1340 18" 
+                fill="none" stroke="#4f46e5" stroke-width="2.5" marker-end="url(#m-indigo)"/>
+          
+          <path d="M 140 18 L 114 18 L 114 44" 
+                fill="none" stroke="#4f46e5" stroke-width="2.5" marker-end="url(#m-indigo)"/>
+
+          <rect x="360" y="6" width="760" height="24" rx="12" fill="#ffffff" stroke="#818cf8"/>
+          <text x="740" y="22" text-anchor="middle" class="badge-txt" fill="#312e81" font-size="10.5">
+            TRANSFERT DU CONTRAT KSL FIGÉ · SEUL INTÉRÊT MÉTIER TRANSMIS À LA TIMELINE 2
+          </text>
+        </g>
+
+        <!-- ========================================================================= -->
+        <!-- TIMELINE 2 : GÉNÉRATION DU CODE CIBLE SEULEMENT À PARTIR DE Le KSL         -->
+        <!-- ========================================================================= -->
+        <g transform="translate(40, 564)">
+          <!-- Container Timeline 2 -->
+          <rect width="1480" height="616" rx="16" fill="#ffffff" stroke="#fed7aa" stroke-width="1.8" filter="url(#shadow-sm)"/>
+          
+          <!-- Header Timeline 2 -->
+          <rect width="1480" height="42" rx="16" fill="#fff7ed"/>
+          <rect y="30" width="1480" height="12" fill="#fff7ed"/>
+          <line x1="0" y1="42" x2="1480" y2="42" stroke="#fed7aa" stroke-width="1"/>
+
+          <rect x="14" y="10" width="22" height="22" rx="6" fill="#ea580c"/>
+          <text x="25" y="25" text-anchor="middle" class="font-title" font-size="12" fill="#ffffff">2</text>
+          <text x="44" y="26" class="font-heading" font-size="14.5" fill="#c2410c">TIMELINE 2 : GÉNÉRATION DU CODE CIBLE SEULEMENT À PARTIR DES SPÉCIFICATIONS FORMELLES KSL</text>
+          <text x="795" y="26" class="font-body" font-size="11.5" fill="#ea580c">— Compilation industrielle multi-domaines (Aucun Doc First admis ici)</text>
+
+          <rect x="1250" y="10" width="216" height="22" rx="11" fill="#ffedd5"/>
+          <text x="1358" y="24" text-anchor="middle" class="badge-txt" fill="#c2410c">PASSE 2 · COMPILATION CIBLE</text>
+
+          <!-- 2.1 INPUTS T2 (x=16, y=52, width=276, height=548) -->
+          <g transform="translate(16, 52)">
+            <rect width="276" height="548" rx="12" fill="#faf5ff" stroke="#ddd6fe" stroke-width="1.2"/>
+            <rect width="276" height="30" rx="12" fill="#ede9fe"/>
+            <rect y="20" width="276" height="10" fill="#ede9fe"/>
+            <text x="12" y="20" class="badge-txt" fill="#6d28d9">2.1 ENTRÉE UNIQUE : KSL FORMEL</text>
+
+            <!-- Card KSL Input -->
+            <g transform="translate(10, 36)">
+              <rect width="256" height="296" rx="10" fill="#ffffff" stroke="#818cf8" stroke-width="1.5"/>
+              <rect x="8" y="8" width="130" height="20" rx="4" fill="#ede9fe"/>
+              <text x="73" y="22" text-anchor="middle" class="badge-txt" fill="#5b21b6">ENTRÉE EXCLUSIVE</text>
+              <text x="10" y="44" class="font-heading" font-size="12.5" fill="#312e81">Spécifications Formelles KSL</text>
+              <text x="10" y="60" class="font-sub" font-size="10" fill="#6366f1">Issues de la Timeline 1</text>
+
+              <rect x="8" y="70" width="240" height="66" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+              <text x="14" y="86" class="font-mono" font-size="10" fill="#4338ca">• .project.ksl (topologie &amp; stack)</text>
+              <text x="14" y="104" class="font-mono" font-size="10" fill="#4338ca">• .module.ksl (domaines métier)</text>
+              <text x="14" y="122" class="font-mono" font-size="10" fill="#4338ca">• .spec.ksl (strategies inline, budget spec-level)</text>
+
+              <!-- Paramètres intégrés à le KSL -->
+              <rect x="8" y="146" width="240" height="136" rx="6" fill="#f5f3ff" stroke="#c4b5fd"/>
+              <text x="14" y="164" class="font-heading" font-size="10.5" fill="#5b21b6">PARAMÈTRES EMBARQUÉS DANS Le KSL :</text>
+              <text x="14" y="182" class="font-body" font-size="9.5" fill="#475569">• Repositories &amp; dépendances cibles</text>
+              <text x="14" y="198" class="font-body" font-size="9.5" fill="#475569">• Outputs demandés (Kotlin, SQL, TF...)</text>
+              <text x="14" y="214" class="font-body" font-size="9.5" fill="#475569">• Budget d'itérations fixé</text>
+              <rect x="12" y="226" width="216" height="46" rx="4" fill="#ffffff" stroke="#ddd6fe"/>
+              <text x="16" y="240" class="font-sub" font-size="9" fill="#7c3aed">Pas de RUN CONTEXT séparé :</text>
+              <text x="16" y="254" class="font-body" font-size="8.5" fill="#6d28d9">le KSL porte nativement toute la configuration</text>
+              <text x="16" y="265" class="font-body" font-size="8.5" fill="#6d28d9">du compilateur sans boîte tierce.</text>
+            </g>
+
+            <!-- Card Isolation Doc First -->
+            <g transform="translate(10, 342)">
+              <rect width="256" height="194" rx="8" fill="#fff1f2" stroke="#fecdd3" stroke-width="1.2"/>
+              <rect x="8" y="8" width="168" height="18" rx="4" fill="#ffe4e6"/>
+              <text x="92" y="21" text-anchor="middle" class="badge-txt" fill="#be123c">AUCUN DOC FIRST ADMIS EN T2</text>
+              <text x="10" y="44" class="font-heading" font-size="11.5" fill="#9f1239">Garantie d'Étanchéité Totale</text>
+              <text x="10" y="64" class="font-body" font-size="9.5" fill="#475569">• Zéro prompt flou en entrée de T2</text>
+              <text x="10" y="80" class="font-body" font-size="9.5" fill="#475569">• Zéro ticket Jira brut interprété</text>
+              <text x="10" y="96" class="font-body" font-size="9.5" fill="#475569">• Tout le code découle strictement</text>
+              <text x="10" y="112" class="font-body" font-size="9.5" fill="#475569">  de clauses mathématiques KSL</text>
+              <rect x="8" y="130" width="240" height="52" rx="6" fill="#ffffff" stroke="#fecdd3"/>
+              <text x="128" y="150" text-anchor="middle" class="badge-txt" fill="#9f1239">ZÉRO HALLUCINATION</text>
+              <text x="128" y="168" text-anchor="middle" class="font-body" font-size="8.5" fill="#be123c">Le compilateur rejette formellement ce</text>
+              <text x="128" y="179" text-anchor="middle" class="font-body" font-size="8.5" fill="#be123c">qui n'est pas stipulé dans les contrats KSL</text>
+            </g>
+          </g>
+
+          <!-- Flèche Inputs T2 -> Yadra T2 Stage A -->
+          <line x1="294" y1="200" x2="318" y2="200" stroke="#4f46e5" stroke-width="2.5" marker-end="url(#m-indigo)"/>
+
+          <!-- 2.2 YADRA-EXECUTOR T2 (x=320, y=52, width=816, height=548) -->
+          <g transform="translate(320, 52)">
+            <rect width="816" height="548" rx="14" fill="url(#g-yadra)" stroke="#c7d2fe" stroke-width="1.5"/>
+            <rect width="816" height="32" rx="14" fill="#eef2ff"/>
+            <rect y="20" width="816" height="12" fill="#eef2ff"/>
+            <text x="14" y="21" class="font-heading" font-size="13" fill="#312e81">YADRA-EXECUTOR — Instance T2 : Moteur de Matérialisation &amp; Orchestration</text>
+
+            <!-- Dedicated AI Model Lane T2 -->
+            <g transform="translate(10, 36)">
+              <rect width="796" height="32" rx="8" fill="url(#g-ai)" stroke="#a855f7" stroke-width="1.2"/>
+              <rect x="6" y="4" width="144" height="24" rx="6" fill="#7e22ce"/>
+              <text x="78" y="20" text-anchor="middle" class="badge-txt" fill="#ffffff">🧠 MODÈLE IA DÉDIÉ</text>
+              <text x="160" y="20" class="font-heading" font-size="11" fill="#4a044e">Spécifié par Requête</text>
+              <text x="286" y="20" class="font-body" font-size="9.5" fill="#7e22ce">Allocation dynamique par tâche ──► injecté pour piloter les agents dans A &amp; B</text>
+              <rect x="680" y="4" width="110" height="24" rx="6" fill="#ffffff" stroke="#c084fc"/>
+              <text x="735" y="20" text-anchor="middle" class="badge-txt" fill="#7e22ce">1 REQ = 1 INST</text>
+            </g>
+
+            <!-- EN-TÊTE BOUCLE DE COMPILATION T2 -->
+            <g transform="translate(10, 72)">
+              <rect width="796" height="24" rx="12" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.2"/>
+              <text x="20" y="16" font-size="11">🔄</text>
+              <text x="36" y="16" class="badge-txt" font-size="9.5" fill="#5b21b6">BOUCLE DE COMPILATION DU CODE CIBLE · [ A · COMPRENDRE ➔ B · PRODUIRE ➔ C · LIVRER ]</text>
+              <rect x="680" y="2" width="112" height="20" rx="10" fill="#ffffff" stroke="#a78bfa"/>
+              <text x="736" y="16" text-anchor="middle" class="badge-txt" font-size="8.5" fill="#6d28d9">ARRÊT MONOTONE</text>
+            </g>
+
+            <!-- Stage A · COMPRENDRE T2 (x=10, w=238) -->
+            <g transform="translate(10, 100)">
+              <rect width="238" height="216" rx="10" fill="#ffffff" stroke="#818cf8" stroke-width="1.5" filter="url(#shadow-sm)"/>
+              <rect width="238" height="28" rx="10" fill="#e0e7ff"/>
+              <rect y="18" width="238" height="10" fill="#e0e7ff"/>
+              <text x="12" y="19" class="font-heading" font-size="12" fill="#3730a3">A · COMPRENDRE</text>
+
+              <!-- Contexte Projet Branchement -->
+              <rect x="8" y="32" width="222" height="58" rx="6" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.2"/>
+              <text x="14" y="46" class="font-heading" font-size="10" fill="#5b21b6">🔗 ANCRAGE CONTEXTE PROJET</text>
+              <text x="14" y="60" class="font-body" font-size="9" fill="#6d28d9">• Contrat KSL cible compilé</text>
+              <text x="14" y="74" class="font-body" font-size="9" fill="#6d28d9">• SKILLS du projet (patterns &amp; infra)</text>
+
+              <text x="10" y="104" class="font-body" font-size="9" fill="#475569">• Parsing strict du contrat KSL</text>
+              <text x="10" y="118" class="font-body" font-size="9" fill="#475569">• Dérivation du DAG de compilation</text>
+              <text x="10" y="132" class="font-body" font-size="9" fill="#475569">• Prompting ciblé des agents spécialisés</text>
+              <text x="10" y="146" class="font-body" font-size="9" fill="#475569">• Alignement aux conventions SKILLS</text>
+
+              <rect x="8" y="160" width="222" height="46" rx="6" fill="#ede9fe"/>
+              <text x="119" y="177" text-anchor="middle" class="badge-txt" fill="#4338ca">CADRAGE SÉMANTIQUE STRICT</text>
+              <text x="119" y="193" text-anchor="middle" class="font-body" font-size="8.5" fill="#5b21b6">Zéro dérive par rapport à le KSL</text>
+            </g>
+
+            <!-- Transition A -> B (x=248 à 288, width=40) -->
+            <g transform="translate(248, 185)">
+              <line x1="2" y1="16" x2="38" y2="16" stroke="#4f46e5" stroke-width="2.5" marker-end="url(#m-indigo)"/>
+              <rect x="0" y="0" width="40" height="15" rx="4" fill="#ffffff" stroke="#818cf8" stroke-width="1.2" filter="url(#shadow-sm)"/>
+              <text x="20" y="11" text-anchor="middle" class="badge-txt" font-size="8" fill="#3730a3">PLAN ➔</text>
+            </g>
+
+            <!-- Stage B · PRODUIRE T2 (x=288, w=238) -->
+            <g transform="translate(288, 100)">
+              <rect width="238" height="216" rx="10" fill="#ffffff" stroke="#818cf8" stroke-width="1.5" filter="url(#shadow-sm)"/>
+              <rect width="238" height="28" rx="10" fill="#e0e7ff"/>
+              <rect y="18" width="238" height="10" fill="#e0e7ff"/>
+              <text x="12" y="19" class="font-heading" font-size="12" fill="#3730a3">B · PRODUIRE</text>
+
+              <rect x="8" y="32" width="222" height="46" rx="6" fill="#faf5ff" stroke="#d8b4fe"/>
+              <text x="119" y="49" text-anchor="middle" class="font-heading" font-size="10.5" fill="#7e22ce">Agents IA Spécialisés</text>
+              <text x="119" y="64" text-anchor="middle" class="font-body" font-size="8.5" fill="#6b21a8">Génération multi-domaine bridée par KSL</text>
+
+              <text x="10" y="94" class="font-body" font-size="9" fill="#475569">• Code · data · tests (phase.execute)</text>
+              <text x="10" y="109" class="font-body" font-size="9" fill="#475569">• Sandbox Gradle · tests unitaires</text>
+              <text x="10" y="124" class="font-body" font-size="9" fill="#475569">• Boucle repair (budget KSL)</text>
+              <text x="10" y="139" class="font-body" font-size="9" fill="#475569">• yadra execute · CLI 0.1.7</text>
+
+              <rect x="8" y="160" width="222" height="46" rx="6" fill="#f5f3ff" stroke="#c4b5fd"/>
+              <text x="119" y="177" text-anchor="middle" class="badge-txt" fill="#6d28d9">BOUCLE DANS B · PRODUIRE</text>
+              <text x="119" y="193" text-anchor="middle" class="font-body" font-size="8.5" fill="#5b21b6">LLM + preuves rapprochées</text>
+            </g>
+
+            <!-- Transition B -> C (x=526 à 566, width=40) -->
+            <g transform="translate(526, 185)">
+              <line x1="2" y1="16" x2="38" y2="16" stroke="#059669" stroke-width="2.5" marker-end="url(#m-emerald)"/>
+              <rect x="0" y="0" width="40" height="15" rx="4" fill="#ffffff" stroke="#059669" stroke-width="1.2" filter="url(#shadow-sm)"/>
+              <text x="20" y="11" text-anchor="middle" class="badge-txt" font-size="7.5" fill="#065f46">LIVRER ➔</text>
+            </g>
+
+            <!-- Stage C · LIVRER T2 · Gate (x=566, w=240) -->
+            <g transform="translate(566, 100)">
+              <rect width="240" height="216" rx="10" fill="#ffffff" stroke="#059669" stroke-width="1.5" filter="url(#shadow-sm)"/>
+              <rect width="240" height="28" rx="10" fill="#d1fae5"/>
+              <rect y="18" width="240" height="10" fill="#d1fae5"/>
+              <text x="12" y="19" class="font-heading" font-size="12" fill="#065f46">C · LIVRER</text>
+
+              <rect x="8" y="32" width="224" height="46" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+              <text x="120" y="49" text-anchor="middle" class="font-heading" font-size="10.5" fill="#0f172a">LIVRER T2 · gate</text>
+              <text x="120" y="64" text-anchor="middle" class="badge-txt" font-size="8" fill="#059669">SKILL C · --produce (IA opt.)</text>
+
+              <text x="10" y="94" class="font-body" font-size="9" fill="#475569">• kinds phase.gate (docs, e2e)</text>
+              <text x="10" y="109" class="font-body" font-size="9" fill="#475569">• Verdict oracle (SATISFIED…)</text>
+              <text x="10" y="124" class="font-body" font-size="9" fill="#475569">• Bundle · preuves execute</text>
+              <text x="10" y="139" class="font-body" font-size="9.5" fill="#475569">• yadra gate (0.1.8+)</text>
+
+              <rect x="8" y="160" width="224" height="46" rx="6" fill="#ecfdf5" stroke="#a7f3d0"/>
+              <text x="120" y="177" text-anchor="middle" class="badge-txt" fill="#047857">LIVRAISON CONFORME</text>
+              <text x="120" y="193" text-anchor="middle" class="font-body" font-size="8.5" fill="#065f46">Contrat KSL × preuves surface</text>
+            </g>
+
+            <!-- Boucle interne B · PRODUIRE (sandbox / repair) -->
+            <path d="M 686 316 L 686 332 Q 686 340 674 340 L 418 340 Q 406 340 406 332 L 406 318" 
+                  fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#m-purple)"/>
+            <rect x="424" y="330" width="246" height="18" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.2" filter="url(#shadow-sm)"/>
+            <text x="547" y="343" text-anchor="middle" class="badge-txt" font-size="8" fill="#6d28d9">
+              🔄 BOUCLE B · PRODUIRE : SANDBOX ──► REPAIR (budget)
+            </text>
+
+            <!-- Stage D · ORCHESTRATION & EVIDENCE SEALING -->
+            <g transform="translate(10, 360)">
+              <rect width="796" height="120" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.2"/>
+              <rect width="796" height="28" rx="10" fill="#f1f5f9"/>
+              <rect y="18" width="796" height="10" fill="#f1f5f9"/>
+              <text x="14" y="19" class="font-heading" font-size="12" fill="#1e293b">D · ORCHESTRATION, MANIFEST &amp; SCELLEMENT DES PREUVES</text>
+
+              <g transform="translate(10, 36)">
+                <!-- Subcard 1 -->
+                <rect width="250" height="72" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+                <text x="10" y="22" class="font-heading" font-size="11" fill="#0f172a">Workflow Déterministe</text>
+                <text x="10" y="42" class="font-body" font-size="9" fill="#64748b">Ordonnancement DAG des workers,</text>
+                <text x="10" y="58" class="font-body" font-size="9" fill="#64748b">gestion des dépendances croisées</text>
+
+                <!-- Subcard 2 -->
+                <g transform="translate(262, 0)">
+                  <rect width="250" height="72" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+                  <text x="10" y="22" class="font-heading" font-size="11" fill="#0f172a">Artifact Manifest</text>
+                  <text x="10" y="42" class="font-body" font-size="9" fill="#64748b">Catalogue complet fichiers générés,</text>
+                  <text x="10" y="58" class="font-body" font-size="9" fill="#64748b">checksums SHA-256 de chaque livrable</text>
+                </g>
+
+                <!-- Subcard 3 -->
+                <g transform="translate(524, 0)">
+                  <rect width="252" height="72" rx="6" fill="#ecfdf5" stroke="#a7f3d0"/>
+                  <text x="10" y="22" class="font-heading" font-size="11" fill="#065f46">Evidence Bundle</text>
+                  <text x="10" y="42" class="font-body" font-size="9" fill="#047857">Preuves scellées : rapports FluentTest,</text>
+                  <text x="10" y="58" class="font-body" font-size="9" fill="#047857">traces d'exécution, logs de build</text>
+                </g>
+              </g>
+            </g>
+
+            <!-- Bottom Channel for VIOLATED loop inside Yadra -->
+            <g id="rem-channel" transform="translate(10, 496)">
+              <rect width="796" height="38" rx="6" fill="#fff1f2" stroke="#fecdd3"/>
+              <text x="398" y="24" text-anchor="middle" class="badge-txt" fill="#be123c">CANAL DE REMÉDIATION : RETOUR DU VERDICT VIOLATED ──► RÉPARATION GUIDÉE BORNÉE DANS PRODUIRE</text>
+            </g>
+          </g>
+
+          <!-- Flèche Yadra Stage C/D -> Outputs T2 -->
+          <line x1="1138" y1="200" x2="1152" y2="200" stroke="#ea580c" stroke-width="2.5" marker-end="url(#m-amber)"/>
+
+          <!-- 2.3 OUTPUTS T2 & CONFORMANCE GATE (x=1154, y=52, width=310, height=548) -->
+          <g transform="translate(1154, 52)">
+            <rect width="310" height="548" rx="12" fill="#ffffff" stroke="#fed7aa" stroke-width="1.6"/>
+            <rect width="310" height="30" rx="12" fill="#fff7ed"/>
+            <rect y="20" width="310" height="10" fill="#fff7ed"/>
+            <text x="12" y="20" class="badge-txt" fill="#c2410c">2.3 LIVRABLES DU RUN &amp; CONFORMANCE</text>
+
+            <!-- Outputs Grid -->
+            <g transform="translate(10, 36)">
+              <rect width="290" height="126" rx="8" fill="#fffaf5" stroke="#fed7aa"/>
+              <rect x="8" y="8" width="168" height="18" rx="4" fill="#ffedd5"/>
+              <text x="92" y="21" text-anchor="middle" class="badge-txt" fill="#c2410c">LIVRABLES MULTI-DOMAINES</text>
+
+              <g transform="translate(10, 34)">
+                <text x="0" y="16" class="font-heading" font-size="11" fill="#0f172a">• Sources Kotlin / Java</text>
+                <text x="150" y="16" class="font-body" font-size="9.5" fill="#64748b">Build vérifié</text>
+
+                <text x="0" y="36" class="font-heading" font-size="11" fill="#0f172a">• Schémas &amp; Migrations SQL</text>
+                <text x="150" y="36" class="font-body" font-size="9.5" fill="#64748b">Contrats DDL</text>
+
+                <text x="0" y="56" class="font-heading" font-size="11" fill="#0f172a">• Plans Infra OpenTofu / TF</text>
+                <text x="150" y="56" class="font-body" font-size="9.5" fill="#64748b">Policies checked</text>
+
+                <text x="0" y="76" class="font-heading" font-size="11" fill="#0f172a">• Suites Tests FluentTest</text>
+                <text x="150" y="76" class="font-body" font-size="9.5" fill="#64748b">Couverture 100%</text>
+              </g>
+            </g>
+
+            <!-- Downward Arrow from Outputs to Conformance Gate -->
+            <line x1="155" y1="164" x2="155" y2="180" stroke="#ea580c" stroke-width="2.5" marker-end="url(#m-amber)"/>
+
+            <!-- CONFORMANCE GATE -->
+            <g transform="translate(10, 182)">
+              <rect width="290" height="166" rx="10" fill="#f0fdf4" stroke="#10b981" stroke-width="1.6" filter="url(#shadow-sm)"/>
+              <rect width="290" height="28" rx="10" fill="#dcfce7"/>
+              <rect y="18" width="290" height="10" fill="#dcfce7"/>
+              <text x="12" y="19" class="badge-txt" fill="#065f46">CONFORMANCE GATE (VÉRIFICATION INDÉPENDANTE)</text>
+
+              <!-- Formula Box -->
+              <g transform="translate(10, 36)">
+                <rect width="270" height="38" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+                <text x="64" y="24" text-anchor="middle" class="font-mono" font-size="10.5" fill="#4338ca">KSL Contrat</text>
+                <text x="135" y="24" text-anchor="middle" class="font-title" font-size="12" fill="#64748b">×</text>
+                <text x="206" y="24" text-anchor="middle" class="font-mono" font-size="10" fill="#c2410c">Artifacts + Preuves</text>
+              </g>
+
+              <!-- 3 Verdict Badges -->
+              <g transform="translate(10, 84)">
+                <!-- SATISFIED -->
+                <rect width="84" height="42" rx="6" fill="#ecfdf5" stroke="#10b981"/>
+                <text x="42" y="19" text-anchor="middle" class="badge-txt" fill="#047857">SATISFIED</text>
+                <text x="42" y="34" text-anchor="middle" class="font-body" font-size="8.5" fill="#065f46">Conformité 100%</text>
+
+                <!-- VIOLATED -->
+                <g id="badge-violated" transform="translate(93, 0)">
+                  <rect width="84" height="42" rx="6" fill="#fff1f2" stroke="#f43f5e"/>
+                  <text x="42" y="19" text-anchor="middle" class="badge-txt" fill="#be123c">VIOLATED</text>
+                  <text x="42" y="34" text-anchor="middle" class="font-body" font-size="8.5" fill="#9f1239">Échec preuve</text>
+                </g>
+
+                <!-- UNDECIDABLE -->
+                <g id="badge-undecidable" transform="translate(186, 0)">
+                  <rect width="84" height="42" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+                  <text x="42" y="19" text-anchor="middle" class="badge-txt" fill="#b45309">UNDECIDABLE</text>
+                  <text x="42" y="34" text-anchor="middle" class="font-body" font-size="8.5" fill="#78350f">Ambiguïté spec</text>
+                </g>
+              </g>
+
+              <text x="145" y="148" text-anchor="middle" class="font-body" font-size="8.5" fill="#64748b">Verdict mathématique hors IA · Élimine toute complaisance</text>
+            </g>
+
+            <!-- Downward Arrow from Gate to Verified Bundle -->
+            <line x1="52" y1="350" x2="52" y2="368" stroke="#059669" stroke-width="2.5" marker-end="url(#m-emerald)"/>
+
+            <!-- VERIFIED RESULT BUNDLE -->
+            <g transform="translate(10, 370)">
+              <rect width="290" height="120" rx="10" fill="url(#g-verified)" stroke="#059669" stroke-width="2" filter="url(#shadow-sm)"/>
+              
+              <circle cx="28" cy="42" r="16" fill="#059669"/>
+              <path d="M 21 42 L 26 47 L 35 37" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+              <text x="52" y="32" class="font-heading" font-size="13" fill="#064e3b">VERIFIED RESULT BUNDLE</text>
+              <text x="52" y="48" class="font-sub" font-size="10.5" fill="#047857">Certificat formel de conformité</text>
+              <text x="52" y="66" class="font-body" font-size="9" fill="#065f46">• Code, Data, Infra certifiés</text>
+              <text x="52" y="80" class="font-body" font-size="9" fill="#065f46">• KSL figé + Manifest d'empreinte</text>
+              <text x="52" y="98" class="font-sub" font-size="8.5" fill="#047857">Livrables 100% prêts pour la production</text>
+            </g>
+
+            <text x="155" y="522" text-anchor="middle" class="font-body" font-size="9" fill="#047857">Audit formel scellé : traçabilité clause à code</text>
+          </g>
+        </g>
+
+        <!-- ========================================================================= -->
+        <!-- COULOIRS DÉDIÉS DE RÉTROACTION (VIOLATED & UNDECIDABLE)                   -->
+        <!-- Passent par la droite et le bas, SANS TRAVERSER le Verified Result Bundle! -->
+        <!-- ========================================================================= -->
+
+        <!-- Couloir 1 : VIOLATED ──► Retour direct dans le Canal de Remédiation T2 -->
+        <!-- Sortie à droite de la Conformance Gate : x=1454, y=867 -->
+        <path d="M 1454 867 L 1485 867 Q 1495 867 1495 882 L 1495 1215 Q 1495 1228 1475 1228 L 730 1228 Q 715 1228 715 1215 L 715 1114" 
+              fill="none" stroke="#e11d48" stroke-width="2.5" stroke-dasharray="6 4" marker-end="url(#m-rose)"/>
+        <rect x="880" y="1216" width="360" height="24" rx="12" fill="#ffffff" stroke="#fda4af" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="1060" y="1232" text-anchor="middle" class="badge-txt" fill="#be123c">
+          VIOLATED ──► RETOUR D'INGÉNIERIE BORNÉE DANS PRODUIRE (T2)
+        </text>
+
+        <!-- Couloir 2 : UNDECIDABLE ──► Escalade Arbitrage Humain / Modification Besoin T1 -->
+        <!-- Sortie à droite de la Conformance Gate : x=1454, y=880 -->
+        <path d="M 1454 880 L 1515 880 Q 1528 880 1528 897 L 1528 1270 Q 1528 1285 1510 1285 L 24 1285 Q 12 1285 12 1265 L 12 215 Q 12 195 28 195 L 54 195" 
+              fill="none" stroke="#d97706" stroke-width="2.5" stroke-dasharray="6 4" marker-end="url(#m-amber)"/>
+        <rect x="420" y="1273" width="460" height="24" rx="12" fill="#ffffff" stroke="#fcd34d" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="650" y="1289" text-anchor="middle" class="badge-txt" fill="#b45309">
+          UNDECIDABLE ──► ARBITRAGE HUMAIN / MODIFICATION DU CONTRAT INITIAL (T1)
+        </text>
+
+      </svg>
+    </div>
+
+    <section class="flow-wrapper" aria-label="Scénarios de retour — circulation des données">
+      <div class="flow-header">
+        <h2>Scénarios de retour — circulation des données</h2>
+        <p>
+          Flux entre <strong>entités</strong> (humain, Yadra A/B/C, Conformance Gate) et <strong>technologies</strong>
+          (KSL, SKILLS, LLM, Gradle, FluentTest, SQL, OpenTofu). Les retours ne réécrivent jamais le bundle certifié :
+          ils remettent un <em>payload</em> borné dans B (T2) ou dans le contrat T1.
+        </p>
+      </div>
+      <div class="flow-legend">
+        <span><i class="flow-swatch" style="background:#0284c7"></i> Données aller (contrat → artefacts)</span>
+        <span><i class="flow-swatch" style="background:#7c3aed"></i> Retour C → B (build / tests)</span>
+        <span><i class="flow-swatch" style="background:#e11d48"></i> Retour VIOLATED → B</span>
+        <span><i class="flow-swatch" style="background:#d97706"></i> Retour UNDECIDABLE → T1 / humain</span>
+        <span><i class="flow-swatch" style="background:#059669"></i> SATISFIED → bundle scellé</span>
+      </div>
+      <div class="board-card" role="img" aria-label="Diagramme de circulation des données des scénarios de retour">
+        <svg viewBox="0 0 1560 780" width="1560" height="780" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="f-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#0284c7"/></marker>
+            <marker id="f-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#7c3aed"/></marker>
+            <marker id="f-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#e11d48"/></marker>
+            <marker id="f-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#d97706"/></marker>
+            <marker id="f-em" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#059669"/></marker>
+            <style>
+              .fn { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 700; }
+              .fb { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 400; }
+              .fm { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+              .ft { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 10px; font-weight: 750; letter-spacing: 0.04em; text-transform: uppercase; }
+            </style>
+          </defs>
+          <rect width="1560" height="780" fill="#f8fafc"/>
+
+          <text x="40" y="28" class="ft" fill="#64748b">ALLER : INTENTION → KSL → ARTEFACTS → PREUVES → VERDICT</text>
+
+          <!-- Entités ligne haute -->
+          <g transform="translate(28, 48)">
+            <rect width="150" height="78" rx="10" fill="#fff" stroke="#94a3b8"/>
+            <text x="75" y="28" text-anchor="middle" class="fn" font-size="13" fill="#0f172a">Humain</text>
+            <text x="75" y="48" text-anchor="middle" class="fb" font-size="10" fill="#64748b">PO · arbitre T1</text>
+            <text x="75" y="64" text-anchor="middle" class="fm" font-size="9" fill="#475569">Docs / tickets</text>
+          </g>
+          <line x1="178" y1="87" x2="208" y2="87" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+          <text x="193" y="78" text-anchor="middle" class="fb" font-size="8" fill="#0284c7">intention</text>
+
+          <g transform="translate(210, 48)">
+            <rect width="168" height="78" rx="10" fill="#f0f9ff" stroke="#7dd3fc"/>
+            <text x="84" y="26" text-anchor="middle" class="fn" font-size="13" fill="#0369a1">A · COMPRENDRE</text>
+            <text x="84" y="46" text-anchor="middle" class="fb" font-size="10" fill="#0369a1">Yadra · ancrage</text>
+            <text x="84" y="64" text-anchor="middle" class="fm" font-size="9" fill="#0c4a6e">KSL + SKILLS</text>
+          </g>
+          <line x1="378" y1="87" x2="408" y2="87" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+          <text x="393" y="78" text-anchor="middle" class="fb" font-size="8" fill="#0284c7">.ksl</text>
+
+          <g transform="translate(410, 48)">
+            <rect width="168" height="78" rx="10" fill="#f5f3ff" stroke="#c4b5fd"/>
+            <text x="84" y="26" text-anchor="middle" class="fn" font-size="13" fill="#6d28d9">B · PRODUIRE</text>
+            <text x="84" y="46" text-anchor="middle" class="fb" font-size="10" fill="#6d28d9">LLM dédié / req</text>
+            <text x="84" y="64" text-anchor="middle" class="fm" font-size="9" fill="#5b21b6">Kotlin · SQL · TF</text>
+          </g>
+          <line x1="578" y1="87" x2="608" y2="87" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+          <text x="593" y="78" text-anchor="middle" class="fb" font-size="8" fill="#0284c7">sources</text>
+
+          <g transform="translate(610, 48)">
+            <rect width="176" height="78" rx="10" fill="#ecfdf5" stroke="#a7f3d0"/>
+            <text x="88" y="26" text-anchor="middle" class="fn" font-size="13" fill="#065f46">C · LIVRER</text>
+            <text x="88" y="46" text-anchor="middle" class="fb" font-size="9" fill="#047857">SKILL · preuves · gate</text>
+            <text x="88" y="64" text-anchor="middle" class="fm" font-size="9" fill="#065f46">docs/e2e · bundle</text>
+          </g>
+          <line x1="786" y1="87" x2="816" y2="87" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+          <text x="801" y="78" text-anchor="middle" class="fb" font-size="8" fill="#0284c7">logs</text>
+
+          <g transform="translate(818, 48)">
+            <rect width="168" height="78" rx="10" fill="#fff7ed" stroke="#fed7aa"/>
+            <text x="84" y="26" text-anchor="middle" class="fn" font-size="13" fill="#c2410c">Evidence</text>
+            <text x="84" y="46" text-anchor="middle" class="fb" font-size="10" fill="#9a3412">Manifest SHA-256</text>
+            <text x="84" y="64" text-anchor="middle" class="fm" font-size="9" fill="#9a3412">rapports · traces</text>
+          </g>
+          <line x1="986" y1="87" x2="1016" y2="87" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+          <text x="1001" y="78" text-anchor="middle" class="fb" font-size="8" fill="#0284c7">KSL × preuves</text>
+
+          <g transform="translate(1018, 48)">
+            <rect width="176" height="78" rx="10" fill="#f0fdf4" stroke="#10b981" stroke-width="1.6"/>
+            <text x="88" y="26" text-anchor="middle" class="fn" font-size="13" fill="#065f46">Conformance Gate</text>
+            <text x="88" y="46" text-anchor="middle" class="fb" font-size="9" fill="#047857">verdict · oracle CLI</text>
+            <text x="88" y="64" text-anchor="middle" class="fm" font-size="9" fill="#065f46">3 verdicts</text>
+          </g>
+          <line x1="1194" y1="87" x2="1224" y2="87" stroke="#059669" stroke-width="2" marker-end="url(#f-em)"/>
+
+          <g transform="translate(1226, 48)">
+            <rect width="306" height="78" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="1.8"/>
+            <text x="153" y="28" text-anchor="middle" class="fn" font-size="13" fill="#064e3b">Verified Result Bundle</text>
+            <text x="153" y="48" text-anchor="middle" class="fb" font-size="10" fill="#047857">code · data · infra · KSL figé</text>
+            <text x="153" y="66" text-anchor="middle" class="fm" font-size="9" fill="#065f46">SATISFIED seulement</text>
+          </g>
+
+          <!-- Technologies (bandeau) -->
+          <g transform="translate(28, 148)">
+            <rect width="1504" height="56" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="16" y="22" class="ft" fill="#64748b">Technologies / artefacts en circulation</text>
+            <text x="16" y="42" class="fm" font-size="11" fill="#334155">.project.ksl  ·  .module.ksl  ·  .spec.ksl  ·  SKILLS  ·  Kotlin/Java  ·  SQL DDL  ·  OpenTofu/TF  ·  Gradle  ·  FluentTest JSON  ·  SHA-256 manifest</text>
+          </g>
+
+          <!-- Trois scénarios de retour -->
+          <text x="40" y="240" class="ft" fill="#64748b">TROIS SCÉNARIOS DE RETOUR (PAYLOADS DISTINCTS)</text>
+
+          <!-- S1 C→B -->
+          <g transform="translate(28, 256)">
+            <rect width="488" height="236" rx="14" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
+            <rect width="488" height="32" rx="14" fill="#ede9fe"/>
+            <rect y="22" width="488" height="10" fill="#ede9fe"/>
+            <text x="16" y="22" class="ft" fill="#6d28d9">1 · Retour C → B  ·  build / tests</text>
+            <text x="16" y="56" class="fn" font-size="12" fill="#0f172a">Déclencheur</text>
+            <text x="16" y="74" class="fb" font-size="11" fill="#475569">Gradle FAIL · FluentTest rouge · SQL invalide</text>
+            <text x="16" y="100" class="fn" font-size="12" fill="#0f172a">Données renvoyées vers B</text>
+            <text x="16" y="118" class="fm" font-size="10.5" fill="#5b21b6">logs compilateur  ·  stack traces</text>
+            <text x="16" y="134" class="fm" font-size="10.5" fill="#5b21b6">rapport FluentTest  ·  fichier fautif</text>
+            <text x="16" y="150" class="fm" font-size="10.5" fill="#5b21b6">budget de réparation (borné)</text>
+            <text x="16" y="176" class="fn" font-size="12" fill="#0f172a">Ne circule pas</text>
+            <text x="16" y="194" class="fb" font-size="11" fill="#64748b">KSL figé inchangé · pas de nouveau contrat T1</text>
+            <text x="16" y="220" class="fb" font-size="11" fill="#6d28d9">B régénère seulement les artefacts cassés, puis C rejoue.</text>
+          </g>
+
+          <!-- S2 VIOLATED -->
+          <g transform="translate(536, 256)">
+            <rect width="488" height="236" rx="14" fill="#ffffff" stroke="#fda4af" stroke-width="1.6"/>
+            <rect width="488" height="32" rx="14" fill="#fff1f2"/>
+            <rect y="22" width="488" height="10" fill="#fff1f2"/>
+            <text x="16" y="22" class="ft" fill="#be123c">2 · Retour VIOLATED → B  ·  T2</text>
+            <text x="16" y="56" class="fn" font-size="12" fill="#0f172a">Déclencheur</text>
+            <text x="16" y="74" class="fb" font-size="11" fill="#475569">Gate : preuves ≠ clauses KSL (build OK mais contrat non couvert)</text>
+            <text x="16" y="100" class="fn" font-size="12" fill="#0f172a">Données renvoyées vers B</text>
+            <text x="16" y="118" class="fm" font-size="10.5" fill="#9f1239">verdict VIOLATED  ·  clause_id</text>
+            <text x="16" y="134" class="fm" font-size="10.5" fill="#9f1239">diff KSL × evidence  ·  artefact ciblé</text>
+            <text x="16" y="150" class="fm" font-size="10.5" fill="#9f1239">canal remédiation (budget spec T2)</text>
+            <text x="16" y="176" class="fn" font-size="12" fill="#0f172a">Ne circule pas</text>
+            <text x="16" y="194" class="fb" font-size="11" fill="#64748b">Bundle certifié · pas d’écriture T1</text>
+            <text x="16" y="220" class="fb" font-size="11" fill="#be123c">Réparation guidée dans PRODUIRE, puis nouveau passage Gate.</text>
+          </g>
+
+          <!-- S3 UNDECIDABLE -->
+          <g transform="translate(1044, 256)">
+            <rect width="488" height="236" rx="14" fill="#ffffff" stroke="#fcd34d" stroke-width="1.6"/>
+            <rect width="488" height="32" rx="14" fill="#fffbeb"/>
+            <rect y="22" width="488" height="10" fill="#fffbeb"/>
+            <text x="16" y="22" class="ft" fill="#b45309">3 · Retour UNDECIDABLE → T1</text>
+            <text x="16" y="56" class="fn" font-size="12" fill="#0f172a">Déclencheur</text>
+            <text x="16" y="74" class="fb" font-size="11" fill="#475569">Ambiguïté / contradiction : le Gate ne peut pas juger</text>
+            <text x="16" y="100" class="fn" font-size="12" fill="#0f172a">Données renvoyées vers l’humain + T1</text>
+            <text x="16" y="118" class="fm" font-size="10.5" fill="#92400e">verdict UNDECIDABLE  ·  cause</text>
+            <text x="16" y="134" class="fm" font-size="10.5" fill="#92400e">clause conflictuelle  ·  snapshot KSL</text>
+            <text x="16" y="150" class="fm" font-size="10.5" fill="#92400e">arrêt monotone (pas de guess IA)</text>
+            <text x="16" y="176" class="fn" font-size="12" fill="#0f172a">Ne circule pas</text>
+            <text x="16" y="194" class="fb" font-size="11" fill="#64748b">Aucun artefact T2 « réparé » en silence</text>
+            <text x="16" y="220" class="fb" font-size="11" fill="#b45309">Humain amende le contrat → nouveau KSL scellé → T2 relancé.</text>
+          </g>
+
+          <!-- Mini flow bas : boucles -->
+          <g transform="translate(28, 512)">
+            <rect width="1504" height="244" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="16" y="26" class="ft" fill="#334155">Graphe de circulation (même run)</text>
+
+            <!-- nodes -->
+            <rect x="40" y="48" width="130" height="48" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+            <text x="105" y="68" text-anchor="middle" class="fn" font-size="11" fill="#0f172a">Humain / T1</text>
+            <text x="105" y="84" text-anchor="middle" class="fm" font-size="9" fill="#64748b">contrat KSL</text>
+
+            <rect x="240" y="48" width="130" height="48" rx="8" fill="#f0f9ff" stroke="#7dd3fc"/>
+            <text x="305" y="68" text-anchor="middle" class="fn" font-size="11" fill="#0369a1">A</text>
+            <text x="305" y="84" text-anchor="middle" class="fm" font-size="9" fill="#0369a1">parse + skills</text>
+
+            <rect x="440" y="48" width="130" height="48" rx="8" fill="#f5f3ff" stroke="#c4b5fd"/>
+            <text x="505" y="68" text-anchor="middle" class="fn" font-size="11" fill="#6d28d9">B</text>
+            <text x="505" y="84" text-anchor="middle" class="fm" font-size="9" fill="#6d28d9">LLM + agents</text>
+
+            <rect x="640" y="48" width="130" height="48" rx="8" fill="#ecfdf5" stroke="#a7f3d0"/>
+            <text x="705" y="68" text-anchor="middle" class="fn" font-size="11" fill="#065f46">C</text>
+            <text x="705" y="84" text-anchor="middle" class="fm" font-size="9" fill="#047857">Gradle / tests</text>
+
+            <rect x="840" y="48" width="130" height="48" rx="8" fill="#fff7ed" stroke="#fed7aa"/>
+            <text x="905" y="68" text-anchor="middle" class="fn" font-size="11" fill="#c2410c">Evidence</text>
+            <text x="905" y="84" text-anchor="middle" class="fm" font-size="9" fill="#9a3412">manifest</text>
+
+            <rect x="1040" y="48" width="130" height="48" rx="8" fill="#f0fdf4" stroke="#10b981"/>
+            <text x="1105" y="68" text-anchor="middle" class="fn" font-size="11" fill="#065f46">Gate</text>
+            <text x="1105" y="84" text-anchor="middle" class="fm" font-size="9" fill="#047857">verdict</text>
+
+            <rect x="1240" y="48" width="200" height="48" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.6"/>
+            <text x="1340" y="68" text-anchor="middle" class="fn" font-size="11" fill="#064e3b">Bundle</text>
+            <text x="1340" y="84" text-anchor="middle" class="fm" font-size="9" fill="#047857">SATISFIED · scellé</text>
+
+            <!-- forward arrows -->
+            <line x1="170" y1="72" x2="236" y2="72" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+            <line x1="370" y1="72" x2="436" y2="72" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+            <line x1="570" y1="72" x2="636" y2="72" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+            <line x1="770" y1="72" x2="836" y2="72" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+            <line x1="970" y1="72" x2="1036" y2="72" stroke="#0284c7" stroke-width="2" marker-end="url(#f-blue)"/>
+            <line x1="1170" y1="72" x2="1236" y2="72" stroke="#059669" stroke-width="2" marker-end="url(#f-em)"/>
+
+            <!-- ① C → B : sortie bas de C, rail haut, entrée bas de B -->
+            <path d="M 705 96 L 705 132 L 505 132 L 505 100" fill="none" stroke="#7c3aed" stroke-width="2.2" stroke-dasharray="5 3" marker-end="url(#f-purple)"/>
+            <rect x="522" y="120" width="166" height="20" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+            <text x="605" y="134" text-anchor="middle" class="ft" fill="#6d28d9">① logs + tests → B</text>
+
+            <!-- ② Gate VIOLATED → B : sortie gauche du Gate, rail milieu -->
+            <path d="M 1040 72 L 1018 72 L 1018 168 L 460 168 L 460 100" fill="none" stroke="#e11d48" stroke-width="2.2" stroke-dasharray="5 3" marker-end="url(#f-rose)"/>
+            <rect x="718" y="156" width="196" height="20" rx="8" fill="#ffffff" stroke="#fecdd3"/>
+            <text x="816" y="170" text-anchor="middle" class="ft" fill="#be123c">② clause_id + diff → B</text>
+
+            <!-- ③ Gate UNDECIDABLE → Humain : sortie bas du Gate, rail bas -->
+            <path d="M 1105 96 L 1105 208 L 105 208 L 105 100" fill="none" stroke="#d97706" stroke-width="2.2" stroke-dasharray="5 3" marker-end="url(#f-amber)"/>
+            <rect x="498" y="196" width="268" height="20" rx="8" fill="#ffffff" stroke="#fde68a"/>
+            <text x="632" y="210" text-anchor="middle" class="ft" fill="#b45309">③ cause + snapshot KSL → humain / T1</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SECTION 2 : LES 4 GRANDES RUPTURES DE L'ARCHITECTURE YADRA                -->
+    <!-- ========================================================================= -->
+    <section class="ruptures-wrapper">
+      <div class="ruptures-header">
+        <h2>2. Les 4 Grandes Ruptures de l'Architecture Yadra</h2>
+        <p>Pourquoi Yadra n’est ni un énième agent de « Vibe Coding », ni un atelier de méthodes formelles inerte : un saut de paradigme vers l’ingénierie logicielle déterministe et vérifiée.</p>
+      </div>
+
+      <div class="ruptures-grid">
+        <!-- Rupture 1 -->
+        <div class="rupture-card">
+          <div class="rupture-tag" style="background: #e0f2fe; color: #0369a1;">Rupture 01 · Pivot IR</div>
+          <h3>L’KSL comme « IR » (Représentation Intermédiaire) du Développement IA</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0;">
+            De même que LLVM a standardisé les compilateurs en introduisant une IR pivot entre les syntaxes sources et le binaire machine, Yadra introduit l'<strong>KSL</strong> comme pivot sémantique entre l'expression métier humaine et le code généré.
+          </p>
+          <div class="rupture-block block-market">
+            <span class="block-label">Sur le marché actuel</span>
+            Saut aveugle <em>« Prompt / Jira flou ──► Code source touffu »</em>. Chaque itération réinterprète le code, causant hallucinations, régressions et perte immédiate de l’intention originelle.
+          </div>
+          <div class="rupture-block block-yadra">
+            <span class="block-label">L'innovation Yadra</span>
+            Le KSL fige le contrat déclaratif invariant (modules, règles, stratégies) <strong>avant</strong> d'émettre le moindre artifact. Le code n'est qu'une projection transitoire de cette vérité.
+          </div>
+        </div>
+
+        <!-- Rupture 2 -->
+        <div class="rupture-card">
+          <div class="rupture-tag" style="background: #ecfdf5; color: #047857;">Rupture 02 · Évaluation Externe</div>
+          <h3>Oracle Conformance Gate vs phase LIVRER (Fin du Juge &amp; Partie)</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0;">
+            La <strong>phase C · LIVRER</strong> (SKILL, <code>gate --produce</code>, scellement orchestré) n’est pas « sans IA ». En revanche le <strong>verdict</strong> Conformance Gate (<code>SATISFIED | VIOLATED | UNDECIDABLE</code>) est calculé par des <strong>oracles CLI déterministes</strong>, découplés du LLM qui produit en B ou en <code>--produce</code>.
+          </p>
+          <div class="rupture-block block-market">
+            <span class="block-label">Sur le marché actuel</span>
+            L'agent IA est juge et partie : c’est le même LLM qui produit le code, rédige ses tests de complaisance et décrète que « tout fonctionne », créant une illusion d'autonomie non auditable.
+          </div>
+          <div class="rupture-block block-yadra">
+            <span class="block-label">L'innovation Yadra</span>
+            <code>KSL Snapshot × (Artifacts + Evidence) ⟹ Verdict</code>. La porte de conformité rejette sans appel tout output dont les preuves d'exécution ne satisfont pas rigoureusement le KSL figé.
+          </div>
+        </div>
+
+        <!-- Rupture 3 -->
+        <div class="rupture-card">
+          <div class="rupture-tag" style="background: #fffbeb; color: #b45309;">Rupture 03 · Déterminisme</div>
+          <h3>Le Traitement de l’`UNDECIDABLE` &amp; l’Arrêt Monotone</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0;">
+            Le système transforme les ambiguïtés et contradictions métier en un résultat mathématique de premier ordre, bannissant tout bricolage silencieux de l'IA.
+          </p>
+          <div class="rupture-block block-market">
+            <span class="block-label">Sur le marché actuel</span>
+            Face à une spec floue ou un conflit fonctionnel, l'IA « devine » ce qui l'arrange ou boucle indéfiniment jusqu'à épuisement du budget de tokens, modifiant la spec à l'insu de l'équipe.
+          </div>
+          <div class="rupture-block block-yadra">
+            <span class="block-label">L'innovation Yadra</span>
+            Si une exigence est contradictoire ou non traçable, le verdict <strong>UNDECIDABLE</strong> bloque net le run, consigne la cause exacte et force l'arbitrage humain sur le contrat initial.
+          </div>
+        </div>
+
+        <!-- Rupture 4 -->
+        <div class="rupture-card">
+          <div class="rupture-tag" style="background: #ede9fe; color: #6d28d9;">Rupture 04 · Deux Timelines &amp; Ancrage</div>
+          <h3>La Ségrégation en 2 Timelines &amp; l'Ancrage Projet (KSL + SKILLS)</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0;">
+            L'<strong>KSL est l'unique porte</strong> utilisée par Yadra pour lier le code du projet cible à la spec. Le binder sépare rigoureusement la formalisation de la spécification de la matérialisation du code.
+          </p>
+          <div class="rupture-block block-market">
+            <span class="block-label">Sur le marché actuel</span>
+            Mélange amorphe en une seule passe : l'agent tente de coder directement depuis des tickets ou prompts vagues, dérivant sans contrat invariant et s'appuyant sur des RAGs probabilistes non ancrés.
+          </div>
+          <div class="rupture-block block-yadra">
+            <span class="block-label">L'innovation Yadra</span>
+            <strong>Deux Timelines étanches</strong> : T1 distille l'intention métier (Doc First + KSL existant) en contrats KSL scellés. T2 compile les livrables cibles <em>strictement et uniquement</em> depuis le KSL. Dans les deux cas, Yadra ancre sa compréhension au contexte projet via l'<strong>KSL et les SKILLS</strong>.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tableau Comparatif Marché -->
+      <div class="table-card">
+        <h3>Positionnement Comparatif Face à l'État de l'Art</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Dimension Architecturale</th>
+              <th>Agents de Code IA (Devin, Cursor)</th>
+              <th>Méthodes Formelles (TLA+, Coq)</th>
+              <th>Contrats d'Interface (OpenAPI, Protobuf)</th>
+              <th class="yadra-th">Yadra (Spec-to-Code Binder)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Spécification Pivot</strong></td>
+              <td>Aucune (Prompts / Issues en langage naturel)</td>
+              <td>Mathématique pure (Logique temporelle)</td>
+              <td>Signatures réseau / Types I/O</td>
+              <td class="yadra-col">KSL (Contrat invariant formel &amp; unique porte vers le code)</td>
+            </tr>
+            <tr>
+              <td><strong>Processus de Compilation</strong></td>
+              <td>Une passe floue (Prompt ──► Code direct)</td>
+              <td>Modélisation manuelle sans build</td>
+              <td>Génération syntaxique de stubs</td>
+              <td class="yadra-col">2 Timelines étanches : Formalisation KSL ➔ Matérialisation Cible</td>
+            </tr>
+            <tr>
+              <td><strong>Ancrage au Contexte</strong></td>
+              <td>RAG vectoriel probabiliste et bruitant</td>
+              <td>Spécifié manuellement dans le modèle</td>
+              <td>Schémas isolés hors contexte projet</td>
+              <td class="yadra-col">Section COMPRENDRE branchée en continu sur KSL + SKILLS</td>
+            </tr>
+            <tr>
+              <td><strong>Rôle du Modèle IA</strong></td>
+              <td>Moteur unique tout-en-un (Juge &amp; Partie)</td>
+              <td>Aucun (Démonstrateur manuel / formel)</td>
+              <td>Génération mécanique de stubs</td>
+              <td class="yadra-col">Modèle IA dédié par requête (1 REQ = 1 INSTANCE), bridé par le KSL</td>
+            </tr>
+            <tr>
+              <td><strong>Validation des Outputs</strong></td>
+              <td>Heuristique (tests générés par l'IA elle-même)</td>
+              <td>Preuve formelle exhaustive (coût extrême)</td>
+              <td>Validation de schéma syntaxique</td>
+              <td class="yadra-col">Oracle Gate déterministe (Contrat × Preuves) · phase LIVRER orchestrée (SKILL / --produce)</td>
+            </tr>
+            <tr>
+              <td><strong>Gestion de l'Ambiguïté</strong></td>
+              <td>Hallucination plausible / Boucle infinie</td>
+              <td>Contre-exemple formel complexe</td>
+              <td>Erreur de parsing syntaxique</td>
+              <td class="yadra-col">Verdict UNDECIDABLE ──► Arrêt strict &amp; arbitrage humain</td>
+            </tr>
+            <tr>
+              <td><strong>Livrables Générés</strong></td>
+              <td>Code source uniquement</td>
+              <td>Théorèmes &amp; modèles mathématiques</td>
+              <td>Stubs de clients/serveurs typés</td>
+              <td class="yadra-col">Bundle certifié complet (Code, Data, Infra, Tests, KSL)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,112 @@
+strategy_skeleton 1.0
+
+strategy "Adapter" {
+  id = "adapter"
+  family = "structural"
+  implementation_language = "project"
+
+  intent {
+    """
+    Traduire le contrat d'un composant existant vers le contrat attendu par le
+    client, sans modifier le client ni le composant adapté.
+    """
+  }
+
+  applicability {
+    signals = ["incompatible interface", "legacy", "external api", "translation"]
+  }
+
+  participants {
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Dépend uniquement du contrat Target."
+    }
+    participant "Target" {
+      kind = "contract"
+      responsibility = "Expose les opérations attendues par le domaine appelant."
+    }
+    participant "Adaptee" {
+      kind = "existing_component"
+      responsibility = "Fournit le comportement existant avec un contrat incompatible."
+    }
+    participant "Adapter" {
+      kind = "implementation"
+      responsibility = "Implémente Target et traduit les appels vers Adaptee."
+    }
+  }
+
+  relations {
+    relation "Client" -> "Target" { type = "depends_on" }
+    relation "Adapter" -> "Target" { type = "implements" }
+    relation "Adapter" -> "Adaptee" { type = "delegates_to" }
+  }
+
+  algorithm {
+    step 1 { action = "Recevoir une requête conforme à Target." }
+    step 2 { action = "Convertir arguments et modèles si nécessaire." }
+    step 3 { action = "Déléguer à Adaptee." }
+    step 4 { action = "Convertir résultat et erreurs vers Target." }
+  }
+
+  generation {
+    required = ["Target", "Adapter", "Adaptee binding"]
+    optional = ["request mapper", "response mapper", "error translator"]
+    forbidden = [
+      "Exposer le type Adaptee dans Target",
+      "Faire dépendre Client de l'implémentation Adapter",
+      "Ajouter de la logique métier dans Adapter"
+    ]
+  }
+
+  tests {
+    assertion "contract" {
+      verifies = "Adapter respecte toutes les opérations de Target."
+    }
+    assertion "translation" {
+      verifies = "Arguments, résultats et erreurs sont traduits sans perte."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "Facade", "Proxy", "Populator/Converter"]
+  }
+
+  examples {
+    java {
+      """
+// integrations.api payment-gateway · Target = PaymentGatewaySpi · Adaptee = Stripe SDK
+
+package <basePackage>.domain.spi;
+
+public interface PaymentGatewaySpi {
+  AuthorizationResult authorize(PaymentCommand command);
+}
+
+package <basePackage>.infrastructure.secondary.payment;
+
+@RequiredArgsConstructor
+public class StripePaymentGatewayAdapter implements PaymentGatewaySpi {
+  private final StripeClient stripeClient;
+
+  @Override
+  public AuthorizationResult authorize(PaymentCommand command) {
+    try {
+      Charge charge = stripeClient.charges().create(toStripeChargeRequest(command));
+      return AuthorizationResult.approved(charge.getId());
+    } catch (StripeException ex) {
+      return AuthorizationResult.declined(mapDeclineReason(ex));
+    }
+  }
+
+  private ChargeCreateParams toStripeChargeRequest(PaymentCommand command) {
+    return ChargeCreateParams.builder()
+        .setAmount(command.amountInCents())
+        .setCurrency(command.currency())
+        .setSource(command.paymentToken())
+        .build();
+  }
+}
+      """
+    }
+  }
+}

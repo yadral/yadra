@@ -1,0 +1,94 @@
+strategy_skeleton 1.0
+
+strategy "Facade" {
+  id = "facade"
+  family = "structural"
+  implementation_language = "project"
+
+  intent {
+    """
+    Offrir un point d'entrée cohérent vers un sous-système complexe, sans
+    masquer les contrats spécialisés dont les clients avancés ont besoin.
+    """
+  }
+
+  applicability {
+    signals = ["complex subsystem", "single entry point", "orchestration", "boundary"]
+  }
+
+  participants {
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Appelle le sous-système par son cas d'usage."
+    }
+    participant "Facade" {
+      kind = "boundary"
+      responsibility = "Expose des opérations métier simples et orchestre les composants."
+    }
+    participant "SubsystemComponent" {
+      kind = "collaborator"
+      multiplicity = "one_or_more"
+      responsibility = "Conserve sa responsabilité spécialisée."
+    }
+  }
+
+  relations {
+    relation "Client" -> "Facade" { type = "depends_on" }
+    relation "Facade" -> "SubsystemComponent" { type = "orchestrates" }
+  }
+
+  algorithm {
+    step 1 { action = "Recevoir une intention de haut niveau." }
+    step 2 { action = "Valider uniquement les préconditions de frontière." }
+    step 3 { action = "Ordonner les appels des composants du sous-système." }
+    step 4 { action = "Assembler un résultat cohérent pour le client." }
+  }
+
+  generation {
+    required = ["Facade", "at least one SubsystemComponent binding"]
+    optional = ["Facade contract", "result assembler"]
+    forbidden = [
+      "Dupliquer la logique interne des composants",
+      "Transformer Facade en objet métier universel",
+      "Rendre les composants dépendants de Facade"
+    ]
+  }
+
+  tests {
+    assertion "orchestration" {
+      verifies = "Les collaborateurs sont appelés dans l'ordre contractuel."
+    }
+    assertion "boundary" {
+      verifies = "Les détails du sous-système ne fuient pas vers Client."
+    }
+  }
+
+  composition {
+    compatible = ["Adapter", "Mediator", "Proxy", "Hexagonal"]
+  }
+
+  examples {
+    java {
+      """
+// Facade simplifie l'API client — délègue aux use cases / ports existants (pas un 2e Hexagonal)
+
+package <basePackage>.application.facade.checkout;
+
+@RequiredArgsConstructor
+public class CheckoutFacade {
+  private final CheckoutValidator validator;
+  private final CartRepositorySpi carts;
+  private final PaymentGatewaySpi paymentGateway;
+  private final OrderToResponseConverter orderConverter;
+  private final CheckoutApi checkoutApi;
+
+  public CheckoutResponse checkout(CheckoutRequest request) {
+    validator.validate(request);
+    carts.lockForCheckout(request.getCartId());
+    return checkoutApi.checkout(request);
+  }
+}
+      """
+    }
+  }
+}

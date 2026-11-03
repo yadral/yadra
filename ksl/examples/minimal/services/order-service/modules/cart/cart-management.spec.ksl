@@ -1,0 +1,160 @@
+ksl 1.0
+
+spec "cart-management" {
+  module = "cart"
+
+  meta {
+    name = "Cart Management"
+    target_service = "order-service"
+    version = "1.0"
+    labels = ["cart"]
+  }
+
+  openapi {
+    ref = "docs/openapi/order-service-v1.yaml"
+    action = "update"
+    version = "1.1.0"
+    breaking_changes = false
+    description = """
+    Expose cart CRUD endpoints and stable cart identity for checkout to load lines and totals.
+    """
+  }
+
+  intention {
+    """
+    Let a customer add, change quantity, and remove lines in an active cart
+    before checkout. The cart is the source of truth for line items read by
+    the checkout domain when payment starts.
+    """
+  }
+
+  scope {
+    included = [
+      "Add, update quantity, and remove cart lines",
+      "Persist the active cart per customer or guest session",
+      "Expose a stable cart identity for checkout to load lines and totals"
+    ]
+    excluded = [
+      "Payment, stock reservation, and Outbox (module checkout)",
+      "Wishlist and saved-for-later lists"
+    ]
+  }
+
+  usecases {
+    usecase "add-line" {
+      description = "Customer adds a SKU to the active cart"
+      given = "Customer with an empty or existing cart"
+      when = [
+        "1. Customer adds a SKU with a positive quantity",
+        "2. System merges quantity if the SKU already exists on the cart"
+      ]
+      then = [
+        "Cart contains the SKU with the expected quantity",
+        "Line unit price is captured at add time"
+      ]
+    }
+
+    usecase "update-quantity" {
+      description = "Customer changes quantity on an existing line"
+      given = "Cart with at least one line"
+      when = [
+        "1. Customer sets a new positive quantity for a line",
+        "2. System recalculates cart totals"
+      ]
+      then = [
+        "Line quantity matches the request",
+        "Cart total reflects the updated lines"
+      ]
+    }
+
+    usecase "remove-line" {
+      description = "Customer removes a line from the cart"
+      given = "Cart with two or more lines"
+      when = [
+        "1. Customer removes one line",
+        "2. System persists the remaining lines"
+      ]
+      then = [
+        "Removed SKU is no longer on the cart",
+        "Cart remains valid if at least one line remains"
+      ]
+    }
+  }
+
+  flows {
+    flow "cart-line-lifecycle" {
+      description = "Add, update quantity, and remove lines on the active cart"
+      ref = "docs/diagrams/cart-line-lifecycle.png"
+    }
+  }
+
+  data {
+    postgres {
+      schema = "cart"
+      database = "order_service"
+      in_config = true
+      description = """
+      Active cart and cart_line tables (customer or guest session).
+      Verified data artefacts: Flyway migrations and rollback scripts.
+      """
+    }
+  }
+
+  outputs {
+    kinds = ["ksl", "code", "data", "tests", "docs", "e2e"]
+
+    phase {
+      execute = ["code", "data", "tests"]
+      gate = ["docs", "e2e"]
+    }
+
+    docs {
+      title = "Cart API"
+      swagger = "/docs/swagger-ui"
+      redoc = "/docs/redoc"
+      confluence = "https://docs.yadral.com/display/ARCH/Cart+API"
+      update_jira = true
+    }
+
+    e2e {
+      scenarios = [
+        "Add line, update quantity, remove line on active cart"
+      ]
+      mock_externals = false
+    }
+  }
+
+  strategies {
+    strategy "Hexagonal" {
+      role = "architecture"
+      description = """
+      Cart domain and use cases stay in modules/cart; REST controllers and JPA adapters
+      sit in infrastructure; postgres schema cart holds cart and cart_line tables.
+      """
+    }
+    strategy "Validator" {
+      role = "pattern"
+      description = """
+      Reject invalid quantities and illegal cart state transitions at domain boundaries
+      before persisting cart_line rows.
+      """
+    }
+    strategy "FluentCaseTest" {
+      role = "testing"
+      description = """
+      Map add/update/remove-line use cases to Given/When/Then tests under src/test
+      with in-memory or mocked cart repositories.
+      """
+    }
+  }
+
+  budget {
+    max_repair_loops = 4
+    max_iterations = 6
+  }
+
+  references {
+    jira = "ORD-110"
+    story = "STORY-801: Active cart before checkout"
+  }
+}

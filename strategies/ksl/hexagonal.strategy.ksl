@@ -1,0 +1,316 @@
+strategy_skeleton 1.0
+
+strategy "Hexagonal" {
+  id = "hexagonal"
+  family = "architecture"
+  implementation_language = "project"
+  reference_profile = "tontine"
+
+  intent {
+    """
+    Organiser chaque capacité métier autour du domaine, de ports entrants API et
+    de ports sortants SPI. Les infrastructures primary et secondary dépendent
+    des ports ; le workflow métier ne dépend jamais d'un adapter concret.
+    """
+  }
+
+  applicability {
+    signals = ["code", "domain", "api", "persistence", "integration"]
+  }
+
+  language_binding {
+    source_language = "project.stack.runtime"
+    execution_model = "project.stack.execution"
+    framework = "project.stack.framework"
+    rule = "Les noms de rôles et les dépendances restent identiques quel que soit le langage."
+  }
+
+  layout {
+    root = "<source-root>/<base-package>"
+
+    package "domain.model.<feature>" {
+      role = "Entités, états et comportement métier."
+    }
+    package "domain.api.<feature>" {
+      role = "Ports entrants exposant les cas d'usage."
+    }
+    package "domain.workflow.api.<feature>" {
+      role = "Services applicatifs implémentant les ports entrants."
+    }
+    package "domain.spi" {
+      role = "Ports sortants : persistence et systèmes externes."
+    }
+    package "domain.validator" {
+      role = "Validations métier appelées avant mutation ou effet externe."
+    }
+    package "domain.converter.<feature>" {
+      role = "Conversion des modèles domaine vers réponses."
+    }
+    package "domain.mapper" {
+      role = "Mapping structurel synchrone et sans orchestration."
+    }
+    package "infrastructure.primary.rest" {
+      role = "Adapters entrants REST ; délégation exclusive aux API."
+    }
+    package "infrastructure.primary.rest.dto.<feature>" {
+      role = "Contrats de requête et réponse de l'adapter REST."
+    }
+    package "infrastructure.secondary.<technology>" {
+      role = "Adapters sortants implémentant les SPI."
+    }
+    package "infrastructure.secondary.<technology>.repository" {
+      role = "Contrats techniques du framework de persistence."
+    }
+  }
+
+  participants {
+    participant "DomainModel" {
+      path = "domain.model.<feature>.<Entity>"
+      kind = "domain"
+      multiplicity = "one_or_more"
+      responsibility = "Porter l'état et les transitions métier."
+    }
+    participant "InboundApi" {
+      path = "domain.api.<feature>.<Feature>Api"
+      kind = "input_port"
+      responsibility = "Déclarer les opérations consommées par les adapters primary."
+    }
+    participant "ApplicationService" {
+      path = "domain.workflow.api.<feature>.<Feature>Service"
+      kind = "usecase_implementation"
+      responsibility = "Implémenter InboundApi et orchestrer validation, SPI et conversion."
+    }
+    participant "OutboundSpi" {
+      path = "domain.spi.<Entity>RepositorySpi"
+      kind = "output_port"
+      multiplicity = "one_or_more"
+      responsibility = "Déclarer les besoins sortants avec types métier."
+    }
+    participant "PrimaryAdapter" {
+      path = "infrastructure.primary.rest.<Feature>RestController"
+      kind = "input_adapter"
+      responsibility = "Traduire transport vers InboundApi, sans logique métier."
+    }
+    participant "SecondaryAdapter" {
+      path = "infrastructure.secondary.<technology>.<Entity>RepositorySpiImpl"
+      kind = "output_adapter"
+      multiplicity = "one_or_more"
+      responsibility = "Implémenter OutboundSpi et déléguer au repository technique."
+    }
+    participant "TechnologyRepository" {
+      path = "infrastructure.secondary.<technology>.repository.<Entity><Technology>Repository"
+      kind = "framework_port"
+      responsibility = "Exposer les opérations natives du framework de persistence."
+    }
+    participant "Validator" {
+      path = "domain.validator.<Feature>Validator"
+      kind = "domain_policy"
+      optional = true
+      responsibility = "Valider contexte, ownership, existence et transitions."
+    }
+    participant "ResponseConverter" {
+      path = "domain.converter.<feature>.<Entity>ToResponseConverter"
+      kind = "boundary_mapper"
+      optional = true
+      responsibility = "Produire le DTO de sortie après traitement métier."
+    }
+  }
+
+  relations {
+    relation "PrimaryAdapter" -> "InboundApi" { type = "depends_on" }
+    relation "ApplicationService" -> "InboundApi" { type = "implements" }
+    relation "ApplicationService" -> "OutboundSpi" { type = "depends_on" }
+    relation "ApplicationService" -> "Validator" { type = "depends_on_optional" }
+    relation "ApplicationService" -> "ResponseConverter" { type = "depends_on_optional" }
+    relation "SecondaryAdapter" -> "OutboundSpi" { type = "implements" }
+    relation "SecondaryAdapter" -> "TechnologyRepository" { type = "delegates_to" }
+    relation "ApplicationService" -> "DomainModel" { type = "orchestrates" }
+  }
+
+  workflow {
+    step 1 { actor = "PrimaryAdapter" action = "Recevoir et tracer la requête." }
+    step 2 { actor = "PrimaryAdapter" action = "Déléguer à InboundApi." }
+    step 3 { actor = "ApplicationService" action = "Lire le contexte d'exécution." }
+    step 4 { actor = "ApplicationService" action = "Exécuter Validator si présent." }
+    step 5 { actor = "ApplicationService" action = "Charger ou persister via OutboundSpi." }
+    step 6 { actor = "DomainModel" action = "Exécuter la transition métier." }
+    step 7 { actor = "ApplicationService" action = "Convertir la réponse si nécessaire." }
+  }
+
+  generation {
+    required = [
+      "InboundApi",
+      "ApplicationService",
+      "at least one OutboundSpi",
+      "PrimaryAdapter",
+      "SecondaryAdapter",
+      "TechnologyRepository",
+      "DomainModel"
+    ]
+    optional = ["Validator", "ResponseConverter", "DTO", "Mapper"]
+    naming = [
+      "<Feature>Api",
+      "<Feature>Service",
+      "<Entity>RepositorySpi",
+      "<Entity>RepositorySpiImpl",
+      "<Entity><Technology>Repository",
+      "<Feature>RestController"
+    ]
+    forbidden = [
+      "PrimaryAdapter appelle SecondaryAdapter directement",
+      "ApplicationService dépend d'un repository technique",
+      "Controller contient une transition métier",
+      "SecondaryAdapter implémente un cas d'usage entrant",
+      "Créer un package application distinct du profil Tontine",
+      "Renommer API/SPI/Impl sans demande explicite de la spec"
+    ]
+  }
+
+  tontine_profile {
+    execution_binding = "project"
+    api_result = "project_result single-or-stream when declared by the project"
+    context = "contextual execution when tenant or association is required and supported by the project"
+    dependency_injection = "constructor"
+    annotations = "framework bindings remain at service and adapter boundaries"
+    dto_policy = "InboundApi may expose REST DTOs, matching the existing Tontine codebase."
+    persistence_policy = "Domain models may carry persistence annotations, matching Tontine."
+  }
+
+  tests {
+    layout = [
+      "test/usecase/<feature>/<Feature>UseCase",
+      "test/tester/<Feature>ServiceTester",
+      "test/tester/unit/<feature>/<Feature>ServiceUnitTester",
+      "test/tester/integration/<feature>/<Feature>ServiceIntegrationTester",
+      "test/suite/<feature>/<Feature>UseCaseUT",
+      "test/suite/<feature>/<Feature>UseCaseIT",
+      "test/infrastructure/secondary/repository/<feature>/InMemory<Entity>RepositorySpiImpl",
+      "test/testutil/fluent/<feature>/<Feature>TesterResult",
+      "test/testutil/builder/<Dto>TestBuilder"
+    ]
+    assertion "dependency-direction" {
+      verifies = "Primary → API ← Service → SPI ← Secondary."
+    }
+    assertion "substitution" {
+      verifies = "In-memory SPI implementations replace secondary adapters in unit tests."
+    }
+  }
+
+  composition {
+    required_with = ["Populator/Converter"]
+    compatible = ["Validator", "FluentCaseTest", "TransactionalOutbox"]
+  }
+
+  examples {
+    java {
+      """
+// Spec: order-checkout · layout Tontine (modules/checkout)
+// <source-root>/src/main/java/<basePackage>/… — spécialiser basePackage depuis project
+
+// --- domain.model.checkout.Order (DomainModel) ---
+package <basePackage>.domain.model.checkout;
+
+public class Order {
+  public static Order paid(CartId cartId) { /* transition PAID */ return new Order(); }
+}
+
+// --- domain.api.checkout.CheckoutApi (InboundApi) ---
+package <basePackage>.domain.api.checkout;
+
+import <basePackage>.infrastructure.primary.rest.dto.checkout.CheckoutRequest;
+import <basePackage>.infrastructure.primary.rest.dto.checkout.CheckoutResponse;
+
+public interface CheckoutApi {
+  CheckoutResponse checkout(CheckoutRequest request);
+}
+
+// --- domain.workflow.api.checkout.CheckoutService (ApplicationService) ---
+package <basePackage>.domain.workflow.api.checkout;
+
+@RequiredArgsConstructor
+public class CheckoutService implements CheckoutApi {
+  private final CheckoutValidator validator;
+  private final OrderRepositorySpi orderRepository;
+  private final PaymentGatewaySpi paymentGateway;
+  private final OutboxWriterSpi outboxWriter;
+  private final OrderToResponseConverter orderConverter;
+
+  @Override
+  public CheckoutResponse checkout(CheckoutRequest request) {
+    validator.validate(request);
+    paymentGateway.authorize(request.toPaymentCommand());
+    Order order = orderRepository.save(Order.paid(request.getCartId()));
+    outboxWriter.append(OrderPaidEvent.from(order));
+    return orderConverter.convert(order);
+  }
+}
+
+// --- domain.spi.* (OutboundSpi) ---
+package <basePackage>.domain.spi;
+
+public interface OrderRepositorySpi {
+  Order save(Order order);
+}
+
+public interface PaymentGatewaySpi {
+  AuthorizationResult authorize(PaymentCommand command);
+}
+
+public interface OutboxWriterSpi {
+  void append(OutboxMessage message);
+}
+
+// --- domain.validator.checkout (optional Validator) ---
+package <basePackage>.domain.validator.checkout;
+
+@RequiredArgsConstructor
+public class CheckoutValidator {
+  private final CartRepositorySpi carts;
+  public void validate(CheckoutRequest request) { /* spec usecases */ }
+}
+
+// --- infrastructure.primary.rest (PrimaryAdapter + DTO) ---
+package <basePackage>.infrastructure.primary.rest.dto.checkout;
+
+public class CheckoutRequest {
+  private UUID cartId;
+  public UUID getCartId() { return cartId; }
+  public PaymentCommand toPaymentCommand() { /* … */ return null; }
+}
+
+package <basePackage>.infrastructure.primary.rest.checkout;
+
+@RestController
+@RequestMapping("/api/v1/checkout")
+@RequiredArgsConstructor
+public class CheckoutRestController {
+  private final CheckoutApi checkoutApi;
+
+  @PostMapping
+  public CheckoutResponse checkout(@RequestBody CheckoutRequest body) {
+    return checkoutApi.checkout(body);
+  }
+}
+
+// --- infrastructure.secondary.jpa (SecondaryAdapter + TechnologyRepository) ---
+package <basePackage>.infrastructure.secondary.jpa.repository;
+
+public interface OrderJpaRepository extends JpaRepository<OrderEntity, UUID> {}
+
+package <basePackage>.infrastructure.secondary.jpa.order;
+
+@RequiredArgsConstructor
+public class OrderRepositorySpiImpl implements OrderRepositorySpi {
+  private final OrderJpaRepository jpaRepository;
+
+  @Override
+  public Order save(Order order) {
+    return jpaRepository.save(OrderEntity.from(order)).toDomain();
+  }
+}
+
+// Dépendances: Primary → CheckoutApi ← CheckoutService → *Spi ← *SpiImpl → OrderJpaRepository
+      """
+    }
+  }
+}

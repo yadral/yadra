@@ -1,0 +1,86 @@
+strategy_skeleton 1.0
+
+strategy "Singleton" {
+  id = "singleton"
+  family = "creational"
+  implementation_language = "project"
+
+  intent {
+    """
+    Garantir une instance unique et un point d'accès global contrôlé — seulement
+    lorsque la spec l'exige explicitement (registry, driver partagé).
+    """
+  }
+
+  applicability {
+    signals = ["single instance", "global registry", "shared harness", "one per jvm"]
+  }
+
+  participants {
+    participant "Singleton" {
+      kind = "unique_instance"
+      responsibility = "Expose getInstance ou équivalent project ; construction privée."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Accède via le point d'accès documenté, pas via new."
+    }
+  }
+
+  relations {
+    relation "Client" -> "Singleton" { type = "accesses" }
+  }
+
+  algorithm {
+    step 1 { action = "Lazy ou eager init selon stack et thread-safety du projet." }
+    step 2 { action = "Retourner la même instance pour toute la portée définie." }
+  }
+
+  generation {
+    required = ["Singleton", "documented scope (JVM, process, test run)"]
+    optional = ["reset for tests", "double-checked locking only if stack requires"]
+    forbidden = [
+      "Singleton par défaut pour tout service métier",
+      "État mutable global sans politique de test",
+      "Masquer une dépendance qui devrait être injectée (DIY / Hexagonal)"
+    ]
+  }
+
+  tests {
+    assertion "uniqueness" {
+      verifies = "Deux accès retournent la même instance dans la portée déclarée."
+    }
+    assertion "test-isolation" {
+      applies_when = "integration or unit with shared harness"
+      verifies = "Reset ou portée test documentée évite la fuite entre scénarios."
+    }
+  }
+
+  composition {
+    compatible = ["FluentCaseTest", "DIY"]
+  }
+
+  examples {
+    java {
+      """
+// Préférer DIY + @Bean si la spec ne impose pas Singleton — pattern rare en services stateless
+
+package <basePackage>.domain.config;
+
+public final class CheckoutFeatureFlags {
+  private static final CheckoutFeatureFlags INSTANCE = new CheckoutFeatureFlags();
+
+  private CheckoutFeatureFlags() {}
+
+  public static CheckoutFeatureFlags getInstance() {
+    return INSTANCE;
+  }
+
+  public boolean guestCheckoutEnabled() {
+    return Boolean.parseBoolean(System.getProperty("checkout.guest.enabled", "true"));
+  }
+}
+      """
+    }
+  }
+}

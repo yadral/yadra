@@ -1,0 +1,131 @@
+strategy_skeleton 1.0
+
+strategy "Cronjob" {
+  id = "cronjob"
+  family = "scheduling"
+  implementation_language = "project"
+  reference_profile = "multiflex"
+
+  intent {
+    """
+    Enregistrer et exécuter des tâches planifiées (cron récurrent ou one-shot)
+    déclarées dans le code feature, activables et paramétrables via configuration
+    projet, avec retries et support sync ou flux async selon la stack.
+    """
+  }
+
+  applicability {
+    signals = ["cron", "scheduled", "job", "recurring", "batch", "jobrunr", "maintenance"]
+  }
+
+  reference_binding {
+    note = "Profil observé : bean job + marqueur méthode exécutable, registrar au démarrage, JobRunr + properties prefix — adapter au stack du projet."
+    roles_map = [
+      "JobDefinitionMarker → classe portant nom, cron default, configPrefix, recurring",
+      "JobExecutableMarker → unique méthode exécutée par le scheduler",
+      "JobRegistrar → scan contexte, merge config, scheduleRecurrently ou enqueue",
+      "JobExecutor → invocation avec maxRetries, Mono/Flux/sync",
+      "JobProperties → enabled par job, cron override, pool et retries globaux"
+    ]
+  }
+
+  participants {
+    participant "ScheduledJobBean" {
+      kind = "job_implementation"
+      responsibility = "Porte JobDefinitionMarker ; une méthode JobExecutableMarker délègue au use case métier."
+    }
+    participant "JobRegistrar" {
+      kind = "infrastructure_bootstrap"
+      responsibility = "Au démarrage : découvre jobs, respecte enabled/cron depuis config, enregistre auprès du scheduler."
+    }
+    participant "JobSchedulerPort" {
+      kind = "port"
+      responsibility = "Abstraction scheduleRecurrently(cron) / enqueue(one-shot) — JobRunr ou équivalent projet."
+    }
+    participant "JobExecutor" {
+      kind = "executor"
+      responsibility = "Invoke bean#method ; retries ; subscribe Mono/Flux ou log sync success/failure."
+    }
+    participant "JobConfiguration" {
+      kind = "config"
+      responsibility = "Préfixe global (ex. common.jobs) ; map jobId → enabled, cron ; scheduler pool/retries."
+    }
+  }
+
+  relations {
+    relation "JobRegistrar" -> "ScheduledJobBean" { type = "discovers" }
+    relation "JobRegistrar" -> "JobConfiguration" { type = "reads" }
+    relation "JobRegistrar" -> "JobSchedulerPort" { type = "registers" }
+    relation "JobSchedulerPort" -> "JobExecutor" { type = "triggers" }
+    relation "JobExecutor" -> "ScheduledJobBean" { type = "invokes_executable_method" }
+  }
+
+  algorithm {
+    step 1 { action = "PostConstruct / bootstrap : JobRegistrar liste ScheduledJobBean annotés." }
+    step 2 { action = "Merge annotation defaults avec JobConfiguration par configPrefix." }
+    step 3 { action = "Si disabled → skip ; sinon cron effectif et recurring vs one-shot." }
+    step 4 { action = "JobSchedulerPort planifie → JobExecutor avec maxRetries." }
+    step 5 { action = "Méthode exécutable appelle orchestration métier (use case), pas de logique lourde dans Executor." }
+  }
+
+  generation {
+    required = [
+      "ScheduledJobBean with definition + executable method",
+      "JobRegistrar wired to scheduler port",
+      "JobExecutor",
+      "configuration keys documented in spec or project config"
+    ]
+    optional = ["globalVariables in job config", "conditional enable flag at app level"]
+    forbidden = [
+      "Cron ou enabled hardcodés sans override config quand spec exige configurabilité",
+      "Plusieurs méthodes exécutables sur le même bean sans spec",
+      "JobExecutor contenant règles métier",
+      "Scheduled job sans id/name stable pour observabilité",
+      "Ignorer échec après maxRetries sans log ou alerte spec"
+    ]
+  }
+
+  tests {
+    assertion "disabled-skipped" {
+      verifies = "Job disabled in config n'est pas enregistré."
+    }
+    assertion "execution-delegates" {
+      verifies = "Trigger scheduler invoque le use case attendu (IT ou test registrar mock)."
+    }
+    assertion "retry" {
+      verifies = "Échec transitoire respecte maxRetries puis abandon documenté."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "DIY", "Command", "TransactionalOutbox"]
+  }
+
+  examples {
+    java {
+      """
+// application.yml: common.jobs.executable-jobs.purge-stale-carts.enabled / .cron
+
+package <basePackage>.infrastructure.scheduling;
+
+@MultiflexJob(
+    name = "purge-stale-carts",
+    configPrefix = "purge-stale-carts",
+    cron = "0 15 2 * * *",
+    recurring = true)
+@RequiredArgsConstructor
+public class PurgeStaleCartsJob {
+  private final CartCleanupApi cartCleanupApi;
+
+  @MultiflexJobExecutable
+  public Mono<Void> purge() {
+    return cartCleanupApi.purgeAbandonedCartsOlderThan(Duration.ofDays(30));
+  }
+}
+
+// MultiflexJobRegistrar @PostConstruct → jobScheduler.scheduleRecurrently(...)
+// MultiflexJobExecutor.execute(class, method, maxRetries) — métier dans cartCleanupApi
+      """
+    }
+  }
+}

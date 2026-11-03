@@ -1,0 +1,104 @@
+strategy_skeleton 1.0
+
+strategy "Bridge" {
+  id = "bridge"
+  family = "structural"
+  implementation_language = "project"
+
+  intent {
+    """
+    Découpler une abstraction de son implémentation pour qu'elles évoluent
+    indépendamment (deux axes de variation).
+    """
+  }
+
+  applicability {
+    signals = ["abstraction and implementation vary", "platform driver", "rendering backend"]
+  }
+
+  participants {
+    participant "Abstraction" {
+      kind = "high_level_contract"
+      responsibility = "Expose le comportement client ; tient une référence Implementor."
+    }
+    participant "RefinedAbstraction" {
+      kind = "specialization"
+      optional = true
+      responsibility = "Enrichit Abstraction sans nouer les implémentations."
+    }
+    participant "Implementor" {
+      kind = "low_level_contract"
+      responsibility = "Opérations de bas niveau communes à toutes les plateformes."
+    }
+    participant "ConcreteImplementor" {
+      kind = "implementation"
+      multiplicity = "one_or_more"
+      responsibility = "Implémente Implementor pour une techno donnée."
+    }
+  }
+
+  relations {
+    relation "Abstraction" -> "Implementor" { type = "composes" }
+    relation "RefinedAbstraction" -> "Abstraction" { type = "extends_optional" }
+    relation "ConcreteImplementor" -> "Implementor" { type = "implements" }
+  }
+
+  algorithm {
+    step 1 { action = "Abstraction reçoit Implementor par injection." }
+    step 2 { action = "Abstraction délègue les primitives à Implementor." }
+    step 3 { action = "RefinedAbstraction compose les primitives si présent." }
+  }
+
+  generation {
+    required = ["Abstraction", "Implementor", "ConcreteImplementor"]
+    optional = ["RefinedAbstraction"]
+    forbidden = [
+      "Héritage Abstraction→ConcreteImplementor (confondre les axes)",
+      "Conditions sur le type concret dans Abstraction",
+      "Dupliquer Implementor dans chaque RefinedAbstraction"
+    ]
+  }
+
+  tests {
+    assertion "decoupling" {
+      verifies = "Changer ConcreteImplementor ne change pas le contrat Abstraction."
+    }
+  }
+
+  composition {
+    compatible = ["Adapter", "Strategy", "Hexagonal"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.notification;
+
+public interface NotificationChannel {
+  void send(CustomerNotification notification);
+}
+
+public abstract class OrderNotification {
+  protected final NotificationChannel channel;
+
+  protected OrderNotification(NotificationChannel channel) {
+    this.channel = channel;
+  }
+
+  public abstract void notifyCustomer(Order order);
+}
+
+public final class OrderPaidNotification extends OrderNotification {
+  public OrderPaidNotification(NotificationChannel channel) {
+    super(channel);
+  }
+
+  @Override
+  public void notifyCustomer(Order order) {
+    channel.send(CustomerNotification.orderPaid(order.getId(), order.getCustomerEmail()));
+  }
+}
+      """
+    }
+  }
+}

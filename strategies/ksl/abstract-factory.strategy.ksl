@@ -1,0 +1,108 @@
+strategy_skeleton 1.0
+
+strategy "Abstract Factory" {
+  id = "abstract-factory"
+  family = "creational"
+  implementation_language = "project"
+
+  intent {
+    """
+    Fournir une interface de création pour une famille de produits liés, sans
+    nommer les classes concrètes côté client.
+    """
+  }
+
+  applicability {
+    signals = ["product family", "compatible variants", "platform kit", "theme"]
+  }
+
+  participants {
+    participant "AbstractFactory" {
+      kind = "factory_contract"
+      responsibility = "Déclare createProductA, createProductB, … pour la famille."
+    }
+    participant "ConcreteFactory" {
+      kind = "factory_implementation"
+      multiplicity = "one_or_more"
+      responsibility = "Crée des produits concrets compatibles entre eux."
+    }
+    participant "AbstractProduct" {
+      kind = "product_contract"
+      multiplicity = "one_or_more"
+      responsibility = "Contrat commun à chaque rôle de la famille."
+    }
+    participant "ConcreteProduct" {
+      kind = "product_implementation"
+      multiplicity = "two_or_more"
+      responsibility = "Variante concrète d'un AbstractProduct."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Utilise uniquement AbstractFactory et AbstractProduct."
+    }
+  }
+
+  relations {
+    relation "ConcreteFactory" -> "AbstractFactory" { type = "implements" }
+    relation "ConcreteProduct" -> "AbstractProduct" { type = "implements" }
+    relation "ConcreteFactory" -> "ConcreteProduct" { type = "creates_compatible_set" }
+    relation "Client" -> "AbstractFactory" { type = "depends_on" }
+    relation "Client" -> "AbstractProduct" { type = "uses" }
+  }
+
+  algorithm {
+    step 1 { action = "Client reçoit AbstractFactory (injection ou paramètre)." }
+    step 2 { action = "Client demande les produits via l'usine." }
+    step 3 { action = "ConcreteFactory instancie un ensemble cohérent de ConcreteProduct." }
+    step 4 { action = "Client compose le flux sans référencer les types concrets." }
+  }
+
+  generation {
+    required = ["AbstractFactory", "ConcreteFactory", "AbstractProduct", "ConcreteProduct"]
+    optional = ["factory selector", "default family"]
+    forbidden = [
+      "Instancier ConcreteProduct dans Client",
+      "Mélanger des produits de familles différentes sans garde explicite",
+      "Une seule ConcreteFactory sans contrat AbstractFactory"
+    ]
+  }
+
+  tests {
+    assertion "family-coherence" {
+      verifies = "Les produits créés par une ConcreteFactory sont interchangeables."
+    }
+    assertion "client-isolation" {
+      verifies = "Client ne dépend d'aucun ConcreteProduct."
+    }
+  }
+
+  composition {
+    compatible = ["Factory Method", "Builder", "Prototype"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.payment;
+
+public interface PaymentMethodFactory {
+  PaymentAuthorizer createAuthorizer();
+  PaymentCapture createCapture();
+}
+
+@Component
+public class CardPaymentMethodFactory implements PaymentMethodFactory {
+  @Override
+  public PaymentAuthorizer createAuthorizer() {
+    return new CardPaymentAuthorizer();
+  }
+
+  @Override
+  public PaymentCapture createCapture() {
+    return new CardPaymentCapture();
+  }
+}
+      """
+    }
+  }
+}

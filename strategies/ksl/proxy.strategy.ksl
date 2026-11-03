@@ -1,0 +1,92 @@
+strategy_skeleton 1.0
+
+strategy "Proxy" {
+  id = "proxy"
+  family = "structural"
+  implementation_language = "project"
+
+  intent {
+    """
+    Fournir un substitut avec la même interface que le sujet réel pour contrôler
+    l'accès, le lazy loading, le cache ou la journalisation.
+    """
+  }
+
+  applicability {
+    signals = ["lazy load", "access control", "remote stub", "caching wrapper"]
+  }
+
+  participants {
+    participant "Subject" {
+      kind = "contract"
+      responsibility = "Interface commune Proxy et RealSubject."
+    }
+    participant "RealSubject" {
+      kind = "core"
+      responsibility = "Objet coûteux ou distant ; fait le vrai travail."
+    }
+    participant "Proxy" {
+      kind = "surrogate"
+      responsibility = "Implémente Subject ; contrôle puis délègue à RealSubject."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Dépend uniquement de Subject."
+    }
+  }
+
+  relations {
+    relation "RealSubject" -> "Subject" { type = "implements" }
+    relation "Proxy" -> "Subject" { type = "implements" }
+    relation "Proxy" -> "RealSubject" { type = "controls_access_to" }
+    relation "Client" -> "Subject" { type = "depends_on" }
+  }
+
+  algorithm {
+    step 1 { action = "Proxy intercepte l'appel (auth, cache hit, lazy init)." }
+    step 2 { action = "Créer ou récupérer RealSubject si nécessaire." }
+    step 3 { action = "Déléguer et éventuellement mettre en cache le résultat." }
+  }
+
+  generation {
+    required = ["Subject", "Proxy", "RealSubject"]
+    optional = ["virtual proxy", "protection proxy", "remote proxy"]
+    forbidden = [
+      "Exposer RealSubject au Client",
+      "Logique métier lourde dans Proxy au-delà du contrôle d'accès",
+      "Proxy qui change le contrat Subject"
+    ]
+  }
+
+  tests {
+    assertion "substitution" {
+      verifies = "Proxy et RealSubject sont interchangeables pour Client."
+    }
+    assertion "control" {
+      verifies = "La politique (lazy, deny) est appliquée avant délégation."
+    }
+  }
+
+  composition {
+    compatible = ["Adapter", "Decorator", "Facade", "Hexagonal"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.infrastructure.secondary.inventory;
+
+@RequiredArgsConstructor
+public class CachingInventoryServiceProxy implements InventoryApi {
+  private final InventoryApi delegate;
+  private final Cache<Sku, StockLevel> cache;
+
+  @Override
+  public StockLevel checkStock(Sku sku) {
+    return cache.get(sku, delegate::checkStock);
+  }
+}
+      """
+    }
+  }
+}

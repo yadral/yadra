@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yadra — Zoom cœur d'implémentation · 4 familles KSL</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --violet: #7c3aed;
+      --violet-light: #f5f3ff;
+      --emerald: #059669;
+      --emerald-light: #ecfdf5;
+      --blue: #0284c7;
+      --blue-light: #f0f9ff;
+      --amber: #d97706;
+      --amber-light: #fffbeb;
+      --rose: #e11d48;
+      --indigo: #4f46e5;
+      --indigo-light: #eef2ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      width: min(1560px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 64px;
+    }
+    header { text-align: center; margin-bottom: 24px; }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.75rem, 3vw, 2.5rem);
+      font-weight: 850;
+      letter-spacing: -0.035em;
+    }
+    header p {
+      max-width: 920px;
+      margin: 0 auto 12px;
+      color: var(--text-muted);
+      font-size: 1.02rem;
+      line-height: 1.6;
+    }
+    .nav-link {
+      font-size: 0.9rem;
+      color: var(--indigo);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .nav-link:hover { text-decoration: underline; }
+    .board-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 20px 45px -15px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+      margin-bottom: 36px;
+    }
+    svg { display: block; width: 100%; height: auto; }
+    .section-header {
+      text-align: center;
+      margin: 40px 0 24px;
+    }
+    .section-header h2 {
+      margin: 0 0 8px;
+      font-size: 1.65rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+    }
+    .section-header p {
+      max-width: 780px;
+      margin: 0 auto;
+      color: var(--text-muted);
+      font-size: 0.98rem;
+      line-height: 1.55;
+    }
+    .ruptures-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    .rupture-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+    }
+    .rupture-tag {
+      display: inline-flex;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 750;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .rupture-card h3 {
+      margin: 0 0 10px;
+      font-size: 1.05rem;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+    .rupture-card ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      font-size: 0.86rem;
+      color: #475569;
+      line-height: 1.5;
+    }
+    .rupture-card .yadra-side {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--violet-light);
+      border-left: 3px solid var(--violet);
+      font-size: 0.84rem;
+      color: #3b0764;
+      line-height: 1.45;
+    }
+    .table-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+      overflow-x: auto;
+      margin-bottom: 28px;
+    }
+    .table-card h3 {
+      margin: 0 0 14px;
+      font-size: 1.15rem;
+      font-weight: 750;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+      padding: 11px 14px;
+      border-bottom: 2px solid var(--border);
+    }
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      line-height: 1.45;
+    }
+    tr:last-child td { border-bottom: none; }
+    .yadra-col { background: #fdfcff; font-weight: 600; color: #4c1d95; }
+    th.yadra-th { background: #ede9fe; color: #5b21b6; }
+    .note-box {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      color: #78350f;
+      margin-bottom: 28px;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.88em;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Yadra — Cœur d'implémentation &amp; 4 familles KSL</h1>
+      <p>
+        Zoom sur le <strong>runtime Yadra</strong> (complément du diagramme
+        <a class="nav-link" href="ksl-yadra-integrated-architecture.html">Deux Timelines</a>) :
+        comment la grammaire KSL se mappe sur le moteur, les SKILLS et les producteurs d'artefacts —
+        sans un mot-clé KSL = une SKILL.
+      </p>
+      <p><a class="nav-link" href="yadra-ksl-processing.md">yadra-ksl-processing.md</a> · <a class="nav-link" href="ksl-language-spec.md">ksl-language-spec.md</a></p>
+    </header>
+
+    <div class="board-card" role="region" aria-label="Diagramme quatre familles KSL vers coeur Yadra">
+      <svg viewBox="0 0 1520 920" width="1520" height="920" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="shadow-sm" x="-8%" y="-8%" width="116%" height="116%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.05"/>
+          </filter>
+          <marker id="m-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#4f46e5"/>
+          </marker>
+          <marker id="m-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#059669"/>
+          </marker>
+          <style>
+            .font-heading { font-family: system-ui, sans-serif; font-weight: 700; }
+            .font-body { font-family: system-ui, sans-serif; font-weight: 400; }
+            .font-mono { font-family: ui-monospace, monospace; font-weight: 600; font-size: 11px; }
+            .badge { font-family: system-ui, sans-serif; font-size: 9px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+          </style>
+        </defs>
+
+        <rect width="1520" height="920" fill="#f8fafc"/>
+        <text x="24" y="22" class="badge" fill="#64748b">ZOOM COEUR YADRA · QUATRE FAMILLES KSL · SKILLS · MOTEUR · PRODUCTEURS</text>
+
+        <!-- ===== Row 1: Four KSL families ===== -->
+        <text x="24" y="52" class="font-heading" font-size="13" fill="#0f172a">1. Ce que contient vraiment le KSL (surface auteur)</text>
+
+        <!-- F1 Intention -->
+        <g transform="translate(24, 64)">
+          <rect width="350" height="118" rx="12" fill="#f0f9ff" stroke="#7dd3fc" filter="url(#shadow-sm)"/>
+          <text x="14" y="22" class="badge" fill="#0369a1">Famille 1 · Intention &amp; preuve métier</text>
+          <text x="14" y="44" class="font-mono" fill="#0c4a6e">intention · scope · usecases</text>
+          <text x="14" y="60" class="font-mono" fill="#0c4a6e">flows · references · meta</text>
+          <text x="14" y="88" class="font-body" font-size="10" fill="#475569">Données pour A · COMPRENDRE + Gate métier</text>
+          <text x="14" y="102" class="font-body" font-size="10" fill="#0369a1" font-weight="600">Pas des SKILLS</text>
+        </g>
+
+        <!-- F2 Contrats -->
+        <g transform="translate(394, 64)">
+          <rect width="350" height="118" rx="12" fill="#ecfdf5" stroke="#6ee7b7" filter="url(#shadow-sm)"/>
+          <text x="14" y="22" class="badge" fill="#047857">Famille 2 · Contrats &amp; cibles techniques</text>
+          <text x="14" y="44" class="font-mono" fill="#064e3b">openapi · integrations · messaging</text>
+          <text x="14" y="60" class="font-mono" fill="#064e3b">data · storage (+ communications project)</text>
+          <text x="14" y="88" class="font-body" font-size="10" fill="#475569">Paramètres des producteurs (où, quoi, topic…)</text>
+          <text x="14" y="102" class="font-body" font-size="10" fill="#047857" font-weight="600">Plugins / fonctions B · C</text>
+        </g>
+
+        <!-- F3 Manifeste -->
+        <g transform="translate(764, 64)">
+          <rect width="350" height="118" rx="12" fill="#fffbeb" stroke="#fcd34d" filter="url(#shadow-sm)"/>
+          <text x="14" y="22" class="badge" fill="#b45309">Famille 3 · Manifeste de livraison</text>
+          <text x="14" y="44" class="font-mono" fill="#78350f">outputs.kinds · docs · e2e</text>
+          <text x="14" y="60" class="font-mono" fill="#78350f">ksl · code · data · tests · docs · e2e</text>
+          <text x="14" y="88" class="font-body" font-size="10" fill="#475569">Quels producteurs lancer + config</text>
+          <text x="14" y="102" class="font-body" font-size="10" fill="#b45309" font-weight="600">Scheduler boucle T2</text>
+        </g>
+
+        <!-- F4 Style -->
+        <g transform="translate(1134, 64)">
+          <rect width="362" height="118" rx="12" fill="#f5f3ff" stroke="#c4b5fd" filter="url(#shadow-sm)"/>
+          <text x="14" y="22" class="badge" fill="#6d28d9">Famille 4 · Style &amp; gouvernance</text>
+          <text x="14" y="44" class="font-mono" fill="#3b0764">strategies · budget (spec)</text>
+          <text x="14" y="60" class="font-mono" fill="#3b0764">stack · repo · kind (project)</text>
+          <text x="14" y="88" class="font-body" font-size="10" fill="#475569">SKILLS (comment) + moteur (budget, boucles)</text>
+          <text x="14" y="102" class="font-body" font-size="10" fill="#6d28d9" font-weight="600">Jamais skills { } dans le KSL</text>
+        </g>
+
+        <!-- Arrows F1-F4 down to core -->
+        <path d="M 199 182 L 199 218" stroke="#0284c7" stroke-width="2" marker-end="url(#m-indigo)"/>
+        <path d="M 569 182 L 569 218" stroke="#059669" stroke-width="2" marker-end="url(#m-emerald)"/>
+        <path d="M 939 182 L 939 218" stroke="#d97706" stroke-width="2" marker-end="url(#m-indigo)"/>
+        <path d="M 1315 182 L 1315 218" stroke="#7c3aed" stroke-width="2" marker-end="url(#m-indigo)"/>
+
+        <!-- ===== Row 2: Yadra core pipeline ===== -->
+        <text x="24" y="210" class="font-heading" font-size="13" fill="#0f172a">2. Cœur Yadra (implémentation runtime)</text>
+
+        <rect x="24" y="224" width="1472" height="200" rx="14" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow-sm)"/>
+        <text x="40" y="248" class="badge" fill="#64748b">Pipeline commun T1 · C et T2 · A → B → C → D → Gate</text>
+
+        <!-- AST -->
+        <rect x="40" y="262" width="120" height="72" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+        <text x="100" y="288" text-anchor="middle" class="font-heading" font-size="11" fill="#334155">KSL Loader</text>
+        <text x="100" y="304" text-anchor="middle" class="font-body" font-size="9" fill="#64748b">AST + graphe</text>
+        <text x="100" y="320" text-anchor="middle" class="font-mono" fill="#475569">Fonction</text>
+
+        <path d="M 160 298 L 178 298" stroke="#64748b" stroke-width="2" marker-end="url(#m-indigo)"/>
+
+        <!-- Validate -->
+        <rect x="180" y="262" width="120" height="72" rx="8" fill="#ecfdf5" stroke="#6ee7b7"/>
+        <text x="240" y="288" text-anchor="middle" class="font-heading" font-size="11" fill="#065f46">Validate</text>
+        <text x="240" y="304" text-anchor="middle" class="font-body" font-size="9" fill="#64748b">L0–L3 · layout</text>
+        <text x="240" y="320" text-anchor="middle" class="font-mono" fill="#047857">Sans IA</text>
+
+        <path d="M 300 298 L 318 298" stroke="#64748b" stroke-width="2" marker-end="url(#m-indigo)"/>
+
+        <!-- A -->
+        <rect x="320" y="258" width="130" height="80" rx="8" fill="#eef2ff" stroke="#a5b4fc"/>
+        <text x="385" y="284" text-anchor="middle" class="font-heading" font-size="11" fill="#3730a3">A · COMPRENDRE</text>
+        <text x="385" y="300" text-anchor="middle" class="font-body" font-size="9" fill="#64748b">CompilePlan</text>
+        <text x="385" y="316" text-anchor="middle" class="font-body" font-size="8" fill="#4f46e5">F1 F2 F3 → plan</text>
+        <text x="385" y="330" text-anchor="middle" class="font-body" font-size="8" fill="#6d28d9">F4 → SkillResolver</text>
+
+        <path d="M 450 298 L 468 298" stroke="#64748b" stroke-width="2" marker-end="url(#m-indigo)"/>
+
+        <!-- B -->
+        <rect x="470" y="258" width="130" height="80" rx="8" fill="#f5f3ff" stroke="#c4b5fd"/>
+        <text x="535" y="284" text-anchor="middle" class="font-heading" font-size="11" fill="#5b21b6">B · PRODUIRE</text>
+        <text x="535" y="300" text-anchor="middle" class="font-body" font-size="9" fill="#64748b">SKILLS + IA</text>
+        <text x="535" y="316" text-anchor="middle" class="font-body" font-size="8" fill="#7c3aed">6 × ArtifactProducer</text>
+        <text x="535" y="330" text-anchor="middle" class="font-body" font-size="8" fill="#64748b">kinds F3 · params F2</text>
+
+        <path d="M 600 298 L 618 298" stroke="#64748b" stroke-width="2" marker-end="url(#m-indigo)"/>
+
+        <!-- C -->
+        <rect x="620" y="262" width="120" height="72" rx="8" fill="#ecfdf5" stroke="#6ee7b7"/>
+        <text x="680" y="288" text-anchor="middle" class="font-heading" font-size="11" fill="#065f46">C · LIVRER</text>
+        <text x="680" y="304" text-anchor="middle" class="font-body" font-size="9" fill="#64748b">seal · gate · bundle</text>
+        <text x="680" y="320" text-anchor="middle" class="font-mono" font-size="8" fill="#047857">SKILL C · mixte</text>
+
+        <path d="M 740 298 L 758 298" stroke="#64748b" stroke-width="2" marker-end="url(#m-indigo)"/>
+
+        <!-- D -->
+        <rect x="760" y="262" width="120" height="72" rx="8" fill="#f0f9ff" stroke="#7dd3fc"/>
+        <text x="820" y="288" text-anchor="middle" class="font-heading" font-size="11" fill="#0369a1">D · Orchestration</text>
+        <text x="820" y="304" text-anchor="middle" class="font-body" font-size="9" fill="#64748b">T2 seulement</text>
+        <text x="820" y="320" text-anchor="middle" class="font-mono" fill="#0284c7">Manifest · preuves</text>
+
+        <path d="M 880 298 L 898 298" stroke="#64748b" stroke-width="2" marker-end="url(#m-indigo)"/>
+
+        <!-- Gate -->
+        <rect x="900" y="258" width="140" height="80" rx="8" fill="#fff1f2" stroke="#fda4af"/>
+        <text x="970" y="284" text-anchor="middle" class="font-heading" font-size="11" fill="#be123c">Conformance Gate</text>
+        <text x="970" y="302" text-anchor="middle" class="font-mono" font-size="8" fill="#9f1239">KSL scellé ×</text>
+        <text x="970" y="314" text-anchor="middle" class="font-mono" font-size="8" fill="#9f1239">artefacts + preuves</text>
+        <text x="970" y="330" text-anchor="middle" class="font-body" font-size="8" fill="#e11d48">SATISFIED | VIOLATED | UNDECIDABLE</text>
+
+        <!-- Bundle -->
+        <path d="M 1040 298 L 1058 298" stroke="#059669" stroke-width="2" marker-end="url(#m-emerald)"/>
+        <rect x="1060" y="262" width="130" height="72" rx="8" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="1125" y="292" text-anchor="middle" class="font-heading" font-size="10" fill="#065f46">VERIFIED</text>
+        <text x="1125" y="308" text-anchor="middle" class="font-heading" font-size="10" fill="#065f46">RESULT BUNDLE</text>
+
+        <!-- Repair loop C -> B -->
+        <path d="M 680 334 Q 680 380 535 380 Q 390 380 390 338" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="5 4"/>
+        <rect x="420" y="368" width="230" height="22" rx="11" fill="#ffffff" stroke="#fda4af"/>
+        <text x="535" y="383" text-anchor="middle" class="badge" fill="#be123c">VIOLATED · retour B (budget spec)</text>
+
+        <!-- Budget from F4 -->
+        <path d="M 1315 182 L 1315 400 L 1220 400 L 1220 338" fill="none" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="1230" y="395" class="font-body" font-size="9" fill="#6d28d9">budget { } limite boucle</text>
+
+        <!-- ===== Row 3: Three implementation layers ===== -->
+        <text x="24" y="448" class="font-heading" font-size="13" fill="#0f172a">3. Trois couches d'implémentation (pas ~30 SKILLS)</text>
+
+        <!-- SKILLS box -->
+        <rect x="24" y="464" width="470" height="200" rx="14" fill="#f5f3ff" stroke="#c4b5fd" filter="url(#shadow-sm)"/>
+        <text x="40" y="490" class="badge" fill="#6d28d9">SKILLS · petit ensemble transversal (~10–30)</text>
+        <text x="40" y="512" class="font-body" font-size="11" fill="#3b0764">Conventions « comment produire » — jamais listées dans le KSL.</text>
+        <text x="40" y="536" class="font-mono" fill="#5b21b6">strategy "Hexagonal" (role architecture)</text>
+        <text x="40" y="554" class="font-mono" fill="#5b21b6">strategy "Validator" / "Outbox" (role pattern)</text>
+        <text x="40" y="572" class="font-mono" fill="#5b21b6">strategy "FluentCaseTest" (role testing)</text>
+        <text x="40" y="590" class="font-mono" fill="#5b21b6">stack (project) → Kotlin, Gradle, Postgres</text>
+        <text x="40" y="618" class="font-body" font-size="10" fill="#64748b">Invoquées surtout en B · PRODUIRE pour colorer la génération.</text>
+        <text x="40" y="644" class="font-body" font-size="10" fill="#6d28d9" font-weight="600">Pas une SKILL par bloc kafka / postgres / usecase.</text>
+
+        <!-- Moteur box -->
+        <rect x="514" y="464" width="470" height="200" rx="14" fill="#f1f5f9" stroke="#94a3b8" filter="url(#shadow-sm)"/>
+        <text x="530" y="490" class="badge" fill="#475569">Fonctions moteur · sans IA</text>
+        <text x="530" y="512" class="font-body" font-size="11" fill="#334155">Oracles validate · seal · verdict Gate.</text>
+        <text x="530" y="536" class="font-mono" fill="#475569">Parser · graphe project → module → spec</text>
+        <text x="530" y="554" class="font-mono" fill="#475569">yadra validate · yadra project · stack KSL</text>
+        <text x="530" y="572" class="font-mono" fill="#475569">Boucle T2 · budget · C→B · Gate</text>
+        <text x="530" y="590" class="font-mono" fill="#475569">Scellement T1 · seal · digest</text>
+        <text x="530" y="618" class="font-body" font-size="10" fill="#64748b">Phase C · LIVRER = SKILL ; oracles ci-dessus (pas tout le runtime).</text>
+        <text x="530" y="644" class="font-body" font-size="10" fill="#475569" font-weight="600">Ce ne sont pas des SKILLS.</text>
+
+        <!-- Producers box -->
+        <rect x="1004" y="464" width="492" height="200" rx="14" fill="#fffbeb" stroke="#fcd34d" filter="url(#shadow-sm)"/>
+        <text x="1020" y="490" class="badge" fill="#b45309">ArtifactProducers · plugins (6 kinds)</text>
+        <text x="1020" y="512" class="font-body" font-size="11" fill="#78350f">Pilotés par outputs.kinds (famille 3), paramétrés par famille 2.</text>
+        <text x="1020" y="538" class="font-mono" fill="#92400e">ksl · code · data · tests · docs · e2e</text>
+        <text x="1020" y="562" class="font-body" font-size="10" fill="#64748b">Ex. data+postgres → Flyway ; docs → swagger/redoc ;</text>
+        <text x="1020" y="578" class="font-body" font-size="10" fill="#64748b">messaging+kafka + pattern Outbox → code + data.</text>
+        <text x="1020" y="604" class="font-body" font-size="10" fill="#78350f">En B : SKILL Hexagonal colore code ; producteur code écrit les fichiers.</text>
+        <text x="1020" y="644" class="font-body" font-size="10" fill="#b45309" font-weight="600">Registre fixe — pas un plugin par mot KSL.</text>
+
+        <!-- ===== Row 4: Phase matrix ===== -->
+        <text x="24" y="692" class="font-heading" font-size="13" fill="#0f172a">4. SKILLS vs fonctions / plugins par phase</text>
+
+        <rect x="24" y="708" width="1472" height="188" rx="14" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow-sm)"/>
+
+        <!-- Table headers -->
+        <rect x="40" y="724" width="200" height="28" rx="6" fill="#f1f5f9"/>
+        <text x="140" y="742" text-anchor="middle" class="font-heading" font-size="11" fill="#334155">Phase</text>
+        <rect x="250" y="724" width="380" height="28" rx="6" fill="#f5f3ff"/>
+        <text x="440" y="742" text-anchor="middle" class="font-heading" font-size="11" fill="#5b21b6">SKILLS</text>
+        <rect x="640" y="724" width="840" height="28" rx="6" fill="#ecfdf5"/>
+        <text x="1060" y="742" text-anchor="middle" class="font-heading" font-size="11" fill="#047857">Fonctions / plugins</text>
+
+        <!-- A row -->
+        <text x="52" y="778" class="font-heading" font-size="11" fill="#3730a3">A · COMPRENDRE</text>
+        <text x="260" y="772" class="font-body" font-size="10" fill="#5b21b6">Résolution SKILLS pour le plan</text>
+        <text x="260" y="786" class="font-body" font-size="9" fill="#64748b">(famille 4 + stack)</text>
+        <text x="652" y="778" class="font-body" font-size="10" fill="#334155">Plan · graphe · cohérence sémantique · familles 1–3</text>
+
+        <!-- B row -->
+        <text x="52" y="818" class="font-heading" font-size="11" fill="#3730a3">B · PRODUIRE</text>
+        <text x="260" y="812" class="font-body" font-size="10" fill="#5b21b6">SKILLS guident comment générer</text>
+        <text x="260" y="826" class="font-body" font-size="9" fill="#64748b">(IA autorisée)</text>
+        <text x="652" y="818" class="font-body" font-size="10" fill="#334155">Producteurs par outputs.kinds (6) + paramètres contrats</text>
+
+        <!-- C row -->
+        <text x="52" y="858" class="font-heading" font-size="11" fill="#065f46">C · LIVRER</text>
+        <text x="260" y="858" class="font-body" font-size="10" fill="#94a3b8">—</text>
+        <text x="652" y="858" class="font-body" font-size="10" fill="#334155">Gradle · tests · SQL apply · sans IA</text>
+
+        <!-- D row -->
+        <text x="52" y="882" class="font-heading" font-size="11" fill="#0369a1">D · Orchestration</text>
+        <text x="260" y="882" class="font-body" font-size="10" fill="#94a3b8">—</text>
+        <text x="652" y="876" class="font-body" font-size="10" fill="#334155">Manifest · preuves · .yadra/bundles</text>
+        <text x="652" y="890" class="font-body" font-size="9" fill="#64748b">(T2)</text>
+
+        <text x="760" y="910" text-anchor="middle" class="font-body" font-size="9" fill="#64748b">Les ~30 mots-clés grammaire KSL → 4 familles → ce pipeline · pas ~30 SKILLS</text>
+      </svg>
+    </div>
+
+    <div class="note-box">
+      <strong>Règle d'or implémentation :</strong> le KSL reste la surface auteur ; Yadra = <code>moteur</code> + <code>~10–30 SKILLS</code> + <code>6 ArtifactProducers</code>.
+      Voir aussi le diagramme <a class="nav-link" href="ksl-yadra-integrated-architecture.html">Deux Timelines</a> pour T1/T2 et le ruban KSL scellé.
+    </div>
+
+    <section>
+      <div class="section-header">
+        <h2>Les 4 familles KSL — détail</h2>
+        <p>Chaque bloc de spec alimente une couche du runtime ; les SKILLS ne dupliquent pas le vocabulaire KSL.</p>
+      </div>
+
+      <div class="ruptures-grid">
+        <div class="rupture-card">
+          <div class="rupture-tag" style="background: #e0f2fe; color: #0369a1;">Famille 1</div>
+          <h3>Intention &amp; preuve métier</h3>
+          <ul>
+            <li><code>intention</code>, <code>scope</code>, <code>usecases</code></li>
+            <li><code>flows</code>, <code>references</code>, <code>meta</code></li>
+          </ul>
+          <div class="yadra-side">Côté Yadra : contexte pour <strong>A · COMPRENDRE</strong> (LLM T1/T2) et oracles <strong>Conformance Gate</strong>. Pas des SKILLS.</div>
+        </div>
+        <div class="rupture-card">
+          <div class="rupture-tag" style="background: #ecfdf5; color: #047857;">Famille 2</div>
+          <h3>Contrats &amp; cibles techniques</h3>
+          <ul>
+            <li><code>openapi</code>, <code>integrations</code>, <code>messaging</code></li>
+            <li><code>data</code>, <code>storage</code>, <code>communications</code> (project)</li>
+          </ul>
+          <div class="yadra-side">Paramètres des <strong>ArtifactProducers</strong> : où brancher API, topic, bucket, schéma SQL.</div>
+        </div>
+        <div class="rupture-card">
+          <div class="rupture-tag" style="background: #fffbeb; color: #b45309;">Famille 3</div>
+          <h3>Manifeste de livraison</h3>
+          <ul>
+            <li><code>outputs.kinds</code>, blocs <code>docs</code>, <code>e2e</code></li>
+            <li><code>outputs.kinds</code> (manifeste unique)</li>
+          </ul>
+          <div class="yadra-side">Décide <strong>quels producteurs</strong> lancer et avec quelle config (routes Swagger, scénarios e2e).</div>
+        </div>
+        <div class="rupture-card">
+          <div class="rupture-tag" style="background: #ede9fe; color: #6d28d9;">Famille 4</div>
+          <h3>Style &amp; gouvernance</h3>
+          <ul>
+            <li><code>strategies</code>, <code>budget</code> (niveau spec)</li>
+            <li><code>stack</code>, <code>repo</code> (project root)</li>
+          </ul>
+          <div class="yadra-side"><strong>SKILLS</strong> déduites + <strong>moteur</strong> (budget, boucles C→B). Jamais <code>skills { }</code> dans le KSL.</div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <h3>SKILLS + fonctions — uniquement en B · PRODUIRE (rappel)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Phase</th>
+              <th class="yadra-th">SKILLS</th>
+              <th class="yadra-th">Fonctions / plugins</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>A · COMPRENDRE</strong></td>
+              <td class="yadra-col">Résolution SKILLS pour le plan</td>
+              <td>Plan, graphe projet, cohérence sémantique (familles 1–3)</td>
+            </tr>
+            <tr>
+              <td><strong>B · PRODUIRE</strong></td>
+              <td class="yadra-col">SKILLS guident <em>comment</em> générer (IA)</td>
+              <td>Producteurs par <code>outputs.kinds</code> ; ex. SKILL Outbox + <code>data</code> + <code>messaging</code></td>
+            </tr>
+            <tr>
+              <td><strong>C · LIVRER</strong></td>
+              <td class="yadra-col">—</td>
+              <td>Gradle, tests, SQL — sans IA</td>
+            </tr>
+            <tr>
+              <td><strong>D · Orchestration</strong> (T2)</td>
+              <td class="yadra-col">—</td>
+              <td>Manifest, preuves, VERIFIED RESULT BUNDLE</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,108 @@
+strategy_skeleton 1.0
+
+strategy "AsyncRequest-MessageReply" {
+  id = "async-message-reply"
+  family = "async"
+  implementation_language = "project"
+
+  intent {
+    """
+    Découpler requête et réponse via messaging : message de requête avec
+    correlationId, réponse sur queue/topic de reply ou propriété de corrélation broker.
+    """
+  }
+
+  applicability {
+    signals = ["queue", "kafka", "rabbit", "sqs", "reply-to", "correlation-id", "request-reply"]
+  }
+
+  participants {
+    participant "RequestClient" {
+      kind = "consumer"
+      responsibility = "Publie requête avec correlationId et reply destination ; attend réponse corrélée."
+    }
+    participant "RequestTopicOrQueue" {
+      kind = "port"
+      responsibility = "Canal entrant des requêtes async."
+    }
+    participant "ReplyTopicOrQueue" {
+      kind = "port"
+      responsibility = "Canal sortant des réponses ; reply-to ou topic dédié."
+    }
+    participant "MessageProcessor" {
+      kind = "processor"
+      responsibility = "Consomme requête, exécute, publie réponse avec même correlationId."
+    }
+    participant "MessagingAdapter" {
+      kind = "secondary_adapter"
+      responsibility = "Encode/décode headers (correlationId, replyTo), garantit mapping broker."
+    }
+  }
+
+  relations {
+    relation "RequestClient" -> "RequestTopicOrQueue" { type = "publishes" }
+    relation "MessageProcessor" -> "RequestTopicOrQueue" { type = "consumes" }
+    relation "MessageProcessor" -> "ReplyTopicOrQueue" { type = "publishes_reply" }
+    relation "RequestClient" -> "ReplyTopicOrQueue" { type = "consumes_reply" }
+    relation "MessagingAdapter" -> "RequestTopicOrQueue" { type = "binds" }
+    relation "MessagingAdapter" -> "ReplyTopicOrQueue" { type = "binds" }
+  }
+
+  algorithm {
+    step 1 { action = "RequestClient envoie payload + correlationId + replyTo." }
+    step 2 { action = "MessageProcessor traite idempotent si redelivery." }
+    step 3 { action = "Réponse publiée avec correlationId identique." }
+    step 4 { action = "RequestClient associe réponse au pending local (timeout si spec)." }
+  }
+
+  generation {
+    required = ["MessagingAdapter", "RequestTopicOrQueue", "ReplyTopicOrQueue", "MessageProcessor", "correlationId"]
+    optional = ["temporary reply queue per client", "schema registry", "TransactionalOutbox for publish-after-write"]
+    forbidden = [
+      "Réponse sans correlationId quand plusieurs requêtes concurrentes",
+      "Reply queue partagée sans filtrage par correlation",
+      "Traitement non idempotent sur at-least-once consume",
+      "Mélanger RPC sync bloquant et message-reply sans spec"
+    ]
+  }
+
+  tests {
+    assertion "correlation" {
+      verifies = "Deux requêtes concurrentes reçoivent chacune la bonne réponse."
+    }
+    assertion "timeout" {
+      verifies = "Absence de réponse dans le délai spec → erreur ou retry documenté."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "Adapter", "TransactionalOutbox", "Command"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.infrastructure.secondary.messaging;
+
+@Component
+@RequiredArgsConstructor
+public class FraudCheckMessageClient {
+  private final RabbitTemplate rabbitTemplate;
+  private final PendingReplyRegistry pendingReplies;
+
+  public Mono<FraudCheckResult> check(FraudCheckRequest request) {
+    String correlationId = UUID.randomUUID().toString();
+    return pendingReplies.await(correlationId, Duration.ofSeconds(10))
+        .doOnSubscribe(sub -> rabbitTemplate.convertAndSend(
+            "fraud.requests",
+            request,
+            message -> {
+              message.getMessageProperties().setCorrelationId(correlationId);
+              message.getMessageProperties().setReplyTo("fraud.replies");
+            }));
+  }
+}
+      """
+    }
+  }
+}

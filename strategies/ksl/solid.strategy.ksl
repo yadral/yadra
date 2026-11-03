@@ -1,0 +1,98 @@
+strategy_skeleton 1.0
+
+strategy "SOLID" {
+  id = "solid"
+  family = "principles"
+  implementation_language = "project"
+
+  intent {
+    """
+    Contraintes transverses sur le code produit : une responsabilité claire par
+    module, extension sans modification aveugle, substitutivité, interfaces
+    ciblées, inversion des dépendances vers des abstractions.
+    """
+  }
+
+  applicability {
+    signals = ["solid", "srp", "ocp", "lsp", "isp", "dip", "coupling", "cohesion", "interface"]
+  }
+
+  concerns {
+    concern "SRP" {
+      applies_when = "Nouvelle classe ou module mélange persistence, HTTP et règles métier."
+      rule = "Séparer domaine, application, adapters ; une raison de changer par unité."
+    }
+    concern "OCP" {
+      applies_when = "Variantes comportementales ou fournisseurs multiples."
+      rule = "Étendre via nouvelles implémentations de ports, pas via branches géantes."
+    }
+    concern "LSP" {
+      applies_when = "Hiérarchie ou contrats substituables (SPI, policies)."
+      rule = "Toute implémentation respecte le contrat du port sans surprises pour l'appelant."
+    }
+    concern "ISP" {
+      applies_when = "Ports ou interfaces larges avec clients partiels."
+      rule = "Découper les ports par capacité consommée (read vs write, etc.)."
+    }
+    concern "DIP" {
+      applies_when = "Use case ou domaine référence une implémentation concrète."
+      rule = "Dépendre d'abstractions (API/SPI) ; wiring dans composition root."
+    }
+  }
+
+  generation {
+    required = ["Spec strategy description names active letters (e.g. S+D) for this feature"]
+    optional = ["SRP", "OCP", "LSP", "ISP", "DIP — only those cited in spec description"]
+    forbidden = [
+      "God service mélangeant REST, JPA/SQL et règles métier sans spec",
+      "Domaine important framework HTTP ou ORM",
+      "Interface fourre-tout forcée à tous les adapters",
+      "new ConcreteAdapter() dans le cœur métier",
+      "Appliquer les cinq lettres partout si la spec n'en retient que deux"
+    ]
+  }
+
+  tests {
+    assertion "dependency-direction" {
+      verifies = "Modules domaine/application ne dépendent pas d'infrastructure primary/secondary."
+    }
+    assertion "port-surface" {
+      verifies = "Chaque port cité en spec est consommé sans méthodes mortes imposées."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "DIY", "Validator", "Populator/Converter"]
+  }
+
+  examples {
+    java {
+      """
+// Spec strategy description: "S+D" — CheckoutService + ports SPI
+
+package <basePackage>.domain.workflow.api.checkout;
+
+// SRP: une seule raison de changer = orchestration checkout
+@RequiredArgsConstructor
+public class CheckoutService implements CheckoutApi {
+  private final CheckoutValidator validator;           // validation isolée
+  private final OrderRepositorySpi orderRepository;  // DIP: abstraction
+  private final PaymentGatewaySpi paymentGateway;
+}
+
+package <basePackage>.domain.spi;
+
+// ISP: ports étroits plutôt qu'un "OrderDao" fourre-tout
+public interface OrderRepositorySpi extends OrderReadSpi, OrderWriteSpi {}
+
+public interface OrderReadSpi {
+  Optional<Order> findById(OrderId id);
+}
+
+public interface OrderWriteSpi {
+  Order save(Order order);
+}
+      """
+    }
+  }
+}

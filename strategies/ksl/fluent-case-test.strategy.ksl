@@ -1,0 +1,538 @@
+strategy_skeleton 1.0
+
+strategy "FluentCaseTest" {
+  id = "fluent-case-test"
+  family = "testing"
+  implementation_language = "project"
+  reference_profile = "tontine"
+
+  intent {
+    """
+    Décrire les scénarios métier une seule fois sous forme de cas Given/When/Then
+    lisibles, puis exécuter exactement ces scénarios contre plusieurs niveaux
+    d'infrastructure grâce à un contrat Tester. Les résultats sont vérifiés par
+    une API d'assertions fluent propre au domaine. Aucun mock n'est autorisé.
+    """
+  }
+
+  applicability {
+    signals = ["tests", "usecases", "given", "when", "then", "unit", "integration"]
+  }
+
+  project_binding {
+    source_language = "project.stack.runtime"
+    test_framework = "project.stack.testing.framework"
+    assertion_library = "project.stack.testing.assertions"
+    execution_model = "project.stack.execution"
+    integration_runtime = "project.stack.testing.integration"
+    isolation_mechanism = "project.stack.testing.isolation"
+    rule = """
+    Le squelette ne fixe ni JUnit, ni AssertJ, ni Reactor, ni Testcontainers.
+    T2 sélectionne les outils déjà déclarés par le projet, tout en conservant
+    les rôles, le partage des scénarios et l'interdiction des mocks.
+    L'isolation IT d'un moteur data/messaging est un binding projet
+    (Testcontainers, compose, embedded), jamais une section KSL dédiée.
+    """
+  }
+
+  doctrine {
+    no_mocks = true
+    no_mock_framework = true
+    real_system_under_test = true
+    unit_substitution = "in-memory implementation of production ports"
+    integration_substitution = "real adapter and isolated real dependency"
+    scenarios_written_once = true
+  }
+
+  layout {
+    test_root = "<test-source-root>/<base-package>"
+
+    package "usecase.<feature>" {
+      contains = ["<Feature>UseCase"]
+      role = "Scénarios métier partagés ; décrit WHAT."
+    }
+    package "tester" {
+      contains = ["<Feature>ServiceTester"]
+      role = "Contrat des actions et erreurs ; sépare WHAT de HOW."
+    }
+    package "tester.unit.<feature>" {
+      contains = ["<Feature>ServiceUnitTester"]
+      role = "Exécute le service réel avec adapters in-memory."
+    }
+    package "tester.integration.<feature>" {
+      contains = ["<Feature>ServiceIntegrationTester"]
+      role = "Exécute les adapters primary et secondary réels."
+    }
+    package "suite.<feature>" {
+      contains = ["<Feature>UseCaseUT", "<Feature>UseCaseIT"]
+      role = "Sélectionne le Tester concret et hérite des scénarios."
+    }
+    package "testutil.fluent.<feature>" {
+      contains = ["<Feature>TesterResult"]
+      role = "Assertions fluent orientées métier."
+    }
+    package "testutil.builder" {
+      contains = ["<Dto>TestBuilder"]
+      role = "Construction expressive des entrées et états."
+    }
+    package "testutil.fixture.<feature>" {
+      contains = ["<Feature>TestFixtures"]
+      role = "Cas nominaux, limites et invalides nommés."
+    }
+    package "infrastructure.secondary.persistence.inmemory.<feature>" {
+      contains = ["InMemory<Entity>Repository"]
+      role = "Stockage réel en mémoire, sans comportement simulé."
+    }
+    package "infrastructure.secondary.repository.<feature>" {
+      contains = ["InMemory<Entity>RepositorySpiImpl"]
+      role = "Adapter in-memory implémentant le même SPI que la production."
+    }
+    package "config" {
+      contains = ["<Engine>TestContainer"]
+      role = "Harness partagé d'une dépendance réelle isolée ; un par engine, jamais par feature."
+      optional = true
+    }
+  }
+
+  participants {
+    participant "UseCase" {
+      path = "usecase.<feature>.<Feature>UseCase"
+      kind = "abstract_scenario_set"
+      responsibility = "Définir les scénarios Given/When/Then indépendamment du mode d'exécution."
+    }
+    participant "Tester" {
+      path = "tester.<Feature>ServiceTester"
+      kind = "test_driver_contract"
+      responsibility = "Déclarer setup, nettoyage, actions métier et attentes d'erreur."
+    }
+    participant "UnitTester" {
+      path = "tester.unit.<feature>.<Feature>ServiceUnitTester"
+      kind = "in_memory_driver"
+      responsibility = "Construire le vrai service avec des implémentations in-memory de ses ports ; ne démarre jamais IsolationHarness."
+    }
+    participant "IntegrationTester" {
+      path = "tester.integration.<feature>.<Feature>ServiceIntegrationTester"
+      kind = "integration_driver"
+      responsibility = "Piloter le vrai adapter primary (HTTP, message) et vider les données ; ne démarre pas IsolationHarness."
+    }
+    participant "UnitSuite" {
+      path = "suite.<feature>.<Feature>UseCaseUT"
+      kind = "scenario_binding"
+      responsibility = "Lier UseCase à UnitTester et nettoyer les données entre scénarios."
+    }
+    participant "IntegrationSuite" {
+      path = "suite.<feature>.<Feature>UseCaseIT"
+      kind = "scenario_binding"
+      responsibility = "Lier UseCase à IntegrationTester ; démarrer ou réutiliser IsolationHarness ; injecter la connexion avant le contexte."
+    }
+    participant "IsolationHarness" {
+      path = "config.<Engine>TestContainer"
+      kind = "shared_real_dependency"
+      multiplicity = "one_per_engine"
+      optional = true
+      responsibility = """
+      Démarrer une instance réelle isolée d'un engine data ou messaging,
+      la réutiliser entre suites IT, et exposer l'URL ou la connexion
+      au contexte applicatif.
+      """
+    }
+    participant "TesterResult" {
+      path = "testutil.fluent.<feature>.<Feature>TesterResult"
+      kind = "fluent_assertion_wrapper"
+      responsibility = "Encapsuler le résultat et retourner self après chaque assertion."
+    }
+    participant "TestBuilder" {
+      path = "testutil.builder.<Dto>TestBuilder"
+      kind = "test_data_builder"
+      responsibility = "Fournir des valeurs valides par défaut et des méthodes with explicites."
+    }
+    participant "Fixtures" {
+      path = "testutil.fixture.<feature>.<Feature>TestFixtures"
+      kind = "scenario_data_catalog"
+      responsibility = "Nommer et composer les entrées nominales, limites et invalides."
+    }
+    participant "InMemoryRepository" {
+      path = "infrastructure.secondary.persistence.inmemory.<feature>.InMemory<Entity>Repository"
+      kind = "real_in_memory_store"
+      multiplicity = "one_per_persistence_port"
+      responsibility = "Exécuter réellement save/find/query/delete/clear dans une structure en mémoire."
+    }
+    participant "InMemorySpiAdapter" {
+      path = "infrastructure.secondary.repository.<feature>.InMemory<Entity>RepositorySpiImpl"
+      kind = "port_implementation"
+      multiplicity = "one_per_persistence_port"
+      responsibility = "Implémenter le SPI de production en déléguant au store in-memory."
+    }
+  }
+
+  relations {
+    relation "UseCase" -> "Tester" { type = "drives_through" }
+    relation "UnitSuite" -> "UseCase" { type = "inherits_scenarios" }
+    relation "UnitSuite" -> "UnitTester" { type = "binds" }
+    relation "IntegrationSuite" -> "UseCase" { type = "inherits_scenarios" }
+    relation "IntegrationSuite" -> "IntegrationTester" { type = "binds" }
+    relation "IntegrationSuite" -> "IsolationHarness" { type = "binds_connection" }
+    relation "UnitTester" -> "InMemorySpiAdapter" { type = "constructs_with" }
+    relation "InMemorySpiAdapter" -> "InMemoryRepository" { type = "delegates_to" }
+    relation "UnitTester" -> "TesterResult" { type = "returns" }
+    relation "IntegrationTester" -> "TesterResult" { type = "returns" }
+    relation "Fixtures" -> "TestBuilder" { type = "composes" }
+    relation "UseCase" -> "Fixtures" { type = "uses" }
+  }
+
+  scenario_flow {
+    step 1 {
+      phase = "given"
+      action = "Construire l'entrée avec une fixture ou un builder nommé."
+    }
+    step 2 {
+      phase = "when"
+      action = "Appeler une opération du contrat Tester."
+    }
+    step 3 {
+      phase = "then"
+      action = "Enchaîner les assertions métier de TesterResult."
+    }
+    step 4 {
+      condition = "expected failure"
+      action = "Passer l'opération au helper d'exception du Tester."
+    }
+  }
+
+  unit_execution {
+    setup = [
+      "Créer les stores in-memory",
+      "Créer les adapters in-memory implémentant les SPI de production",
+      "Construire le vrai service avec ces adapters et les vraies policies locales"
+    ]
+    execute = "Appeler le port entrant ou le service réel directement."
+    teardown = "Vider tous les stores in-memory après chaque scénario."
+  }
+
+  isolation {
+    source = [
+      "spec.data engines",
+      "spec.messaging engines",
+      "project.stack.data",
+      "project.stack.infra"
+    ]
+    unit = "never start an isolated real dependency"
+    integration = "one shared real dependency per required engine"
+    default_mechanism = "project.stack.testing.isolation"
+    rule = """
+    Si la spec déclare un engine réel (postgres, mongo, kafka, …),
+    l'IT isole cette techno. Le mécanisme (Testcontainers, compose,
+    embedded) vient du projet, pas d'un bloc KSL test-container.
+    """
+  }
+
+  isolated_dependency {
+    harness = "IsolationHarness"
+    binding {
+      data = "spec.data engines -> one IsolationHarness per engine"
+      messaging = "spec.messaging engines -> one IsolationHarness per engine"
+    }
+    lifecycle = [
+      "create once (static / singleton)",
+      "pin image or version from project conventions",
+      "reuse across IT classes and JVM runs when supported",
+      "inject connection properties before application context loads",
+      "clear feature data between scenarios",
+      "do not recreate the engine per test method"
+    ]
+    forbidden = [
+      "Démarrer un container dans UseCase ou UnitTester",
+      "Un nouveau container par classe IT si le projet a déjà un harness partagé",
+      "Mocker le moteur déclaré dans data ou messaging",
+      "Pointer l'IT vers une base partagée de développement"
+    ]
+  }
+
+  integration_execution {
+    setup = [
+      "Résoudre les engines depuis spec.data et spec.messaging",
+      "Démarrer ou réutiliser IsolationHarness pour chaque engine réel requis",
+      "Injecter la connexion dans le contexte avant son chargement",
+      "Démarrer le contexte applicatif (profil d'intégration du projet)",
+      "Injecter le client de l'adapter primary et les ports de nettoyage"
+    ]
+    execute = "Appeler l'interface externe réelle : HTTP, message ou autre adapter primary."
+    teardown = "Supprimer les données persistées entre scénarios ; ne pas détruire IsolationHarness."
+  }
+
+  fluent_result {
+    constructor = "TesterResult(actual)"
+    accessor = "get() -> actual"
+    method_rule = "assert<BusinessMeaning>(expected?) -> self"
+    groups = ["validity", "identity", "state", "amount", "date", "relationship", "input match"]
+    forbidden = [
+      "Assertions techniques dispersées dans UseCase",
+      "Retour void empêchant le chaînage",
+      "Accéder au repository depuis TesterResult"
+    ]
+  }
+
+  generation {
+    required = [
+      "UseCase",
+      "Tester",
+      "UnitTester",
+      "UnitSuite",
+      "TesterResult",
+      "TestBuilder",
+      "Fixtures",
+      "InMemoryRepository",
+      "InMemorySpiAdapter"
+    ]
+    optional = [
+      "IntegrationTester",
+      "IntegrationSuite",
+      "IsolationHarness"
+    ]
+    required_when_integration = [
+      "IntegrationTester",
+      "IntegrationSuite"
+    ]
+    required_when_integration_and_real_engine = ["IsolationHarness"]
+    naming = [
+      "<Feature>UseCase",
+      "<Feature>ServiceTester",
+      "<Feature>ServiceUnitTester",
+      "<Feature>ServiceIntegrationTester",
+      "<Feature>UseCaseUT",
+      "<Feature>UseCaseIT",
+      "<Feature>TesterResult",
+      "<Dto>TestBuilder",
+      "<Feature>TestFixtures",
+      "InMemory<Entity>Repository",
+      "InMemory<Entity>RepositorySpiImpl",
+      "<Engine>TestContainer"
+    ]
+    forbidden = [
+      "Utiliser un framework de mock",
+      "Créer un objet annoté Mock ou Spy",
+      "Configurer des réponses when/thenReturn",
+      "Vérifier des interactions artificielles avec verify",
+      "Remplacer le service testé par un double",
+      "Dupliquer les scénarios entre UT et IT",
+      "Écrire un fake qui n'implémente pas le port de production",
+      "Ignorer le nettoyage de l'état entre scénarios",
+      "Démarrer IsolationHarness depuis UseCase ou UnitTester",
+      "Recréer IsolationHarness à chaque méthode de test",
+      "Mocker un engine déclaré dans data ou messaging"
+    ]
+  }
+
+  tontine_isolation_profile {
+    mechanism = "Testcontainers when the project already uses it"
+    harness = "config/<Engine>TestContainer"
+    multiplicity = "one shared singleton per engine"
+    reuse = true
+    image = "pinned by project convention"
+    connection_injection = "before application context loads"
+    integration_profile = "project integration profile (example: it)"
+    tester_scope = "HTTP or primary adapter plus clearData ; never starts containers"
+    unit_scope = "in-memory ports only ; no IsolationHarness"
+    example = "mongo -> MongoDBTestContainer, spring.data.mongodb.uri, profile it"
+  }
+
+  no_mock_policy {
+    external_dependency = "Créer un adapter fake ou in-memory qui implémente le vrai port."
+    persistence = "UT : repository in-memory. IT : IsolationHarness + adapters réels, jamais un mock du moteur data."
+    clock = "Injecter une abstraction Clock déterministe, pas mocker l'horloge globale."
+    identifiers = "Injecter un générateur déterministe ou utiliser une implémentation test réelle."
+    failures = "Configurer l'état du fake pour produire l'échec métier, sans script de mock."
+    verification = "Observer l'état et les résultats, jamais le nombre artificiel d'appels."
+  }
+
+  tests {
+    assertion "shared-scenarios" {
+      verifies = "UT et IT héritent exactement du même UseCase."
+    }
+    assertion "no-mocks" {
+      verifies = "Aucun import, annotation ou appel d'un framework de mock."
+    }
+    assertion "real-port-substitution" {
+      verifies = "Chaque adapter in-memory implémente le port utilisé en production."
+    }
+    assertion "fluent-domain-language" {
+      verifies = "Les assertions expriment le métier et restent chaînables."
+    }
+    assertion "isolation" {
+      verifies = "Chaque scénario commence avec un état contrôlé et nettoyé."
+    }
+    assertion "shared-isolation" {
+      verifies = "Un IsolationHarness par engine data/messaging ; données vidées entre scénarios ; pas de mock de persistence."
+    }
+    assertion "unit-without-harness" {
+      verifies = "UnitTester et UseCase n'importent ni ne démarrent IsolationHarness."
+    }
+  }
+
+  composition {
+    required_with = ["Hexagonal"]
+    compatible = ["Validator", "Populator/Converter", "DIY"]
+  }
+
+  examples {
+    java {
+      """
+// Spec usecases nominal-checkout · insufficient-stock · outputs.kinds contient tests
+// src/test/java/<basePackage>/… — packages alignés sur layout usecase / tester / suite
+
+// --- usecase.checkout.CheckoutUseCase (scénarios partagés UT + IT) ---
+package <basePackage>.usecase.checkout;
+
+public abstract class CheckoutUseCase {
+
+  @Test
+  void nominalCheckout() {
+    checkoutTester()
+        .givenCustomerWithNonEmptyCartAndValidCard()
+        .whenCustomerInitiatesCheckout()
+        .thenOrderIsPaidAndOutboxContainsOrderPaidEvent();
+  }
+
+  @Test
+  void insufficientStock() {
+    checkoutTester()
+        .givenCartWithDepletedInventory()
+        .whenCustomerInitiatesCheckout()
+        .thenExpectValidationError("cart", "insufficient_stock");
+  }
+
+  protected abstract CheckoutServiceTester checkoutTester();
+}
+
+// --- tester.CheckoutServiceTester (WHAT vs HOW) ---
+package <basePackage>.tester;
+
+public abstract class CheckoutServiceTester {
+  protected CheckoutRequestTestBuilder request = CheckoutRequestTestBuilder.validDefault();
+
+  public CheckoutServiceTester givenCustomerWithNonEmptyCartAndValidCard() {
+    fixtures().seedNonEmptyCart(request.cartId());
+    return this;
+  }
+
+  public CheckoutServiceTester givenCartWithDepletedInventory() {
+    fixtures().seedCartWithDepletedStock(request.cartId());
+    return this;
+  }
+
+  public CheckoutServiceTester whenCustomerInitiatesCheckout() {
+    lastResult = CheckoutTesterResult.of(
+        checkoutApi().checkout(request.build()));
+    return this;
+  }
+
+  public CheckoutServiceTester thenOrderIsPaidAndOutboxContainsOrderPaidEvent() {
+    lastResult.assertStatusPaid().assertOutboxHasEvent("OrderPaid");
+    return this;
+  }
+
+  public void thenExpectValidationError(String field, String code) {
+    assertThrowsValidation(field, code, () -> checkoutApi().checkout(request.build()));
+  }
+
+  protected abstract CheckoutApi checkoutApi();
+  protected abstract CheckoutTestFixtures fixtures();
+  private CheckoutTesterResult lastResult;
+}
+
+// --- tester.unit.checkout (in-memory SPI — pas de IsolationHarness) ---
+package <basePackage>.tester.unit.checkout;
+
+public class CheckoutServiceUnitTester extends CheckoutServiceTester {
+  private final CheckoutUnitWiring wiring = new CheckoutUnitWiring();
+
+  @BeforeEach
+  void clearStores() {
+    wiring.clearAllInMemoryStores();
+  }
+
+  @Override
+  protected CheckoutApi checkoutApi() {
+    return wiring.checkoutService(); // vrai CheckoutService + InMemory*RepositorySpiImpl
+  }
+
+  @Override
+  protected CheckoutTestFixtures fixtures() {
+    return wiring.fixtures();
+  }
+}
+
+// --- suite.checkout.CheckoutUseCaseUT ---
+package <basePackage>.suite.checkout;
+
+class CheckoutUseCaseUT extends CheckoutUseCase {
+  private final CheckoutServiceUnitTester tester = new CheckoutServiceUnitTester();
+  @Override
+  protected CheckoutServiceTester checkoutTester() { return tester; }
+}
+
+// --- config.PostgresTestContainer (spec.data postgres — un harness partagé) ---
+package <basePackage>.config;
+
+public final class PostgresTestContainer {
+  private static final PostgreSQLContainer<?> CONTAINER = new PostgreSQLContainer<>("postgres:16-alpine");
+  static { CONTAINER.start(); }
+  public static String jdbcUrl() { return CONTAINER.getJdbcUrl(); }
+}
+
+// --- tester.integration.checkout (HTTP réel + harness ; clearData entre scénarios) ---
+package <basePackage>.tester.integration.checkout;
+
+@SpringBootTest(webEnvironment = RANDOM_PORT)
+@ActiveProfiles("it")
+class CheckoutServiceIntegrationTester extends CheckoutServiceTester {
+  @Autowired private TestRestTemplate http;
+  @Autowired private OutboxEventRepository outbox;
+  @Autowired private CheckoutTestFixtures fixtures;
+
+  @BeforeEach
+  void clearFeatureData() {
+    fixtures.clearOrdersAndOutbox();
+  }
+
+  @Override
+  protected CheckoutApi checkoutApi() {
+    return request -> http.postForEntity("/api/v1/checkout", request, CheckoutResponse.class).getBody();
+  }
+
+  @Override
+  protected CheckoutTestFixtures fixtures() { return fixtures; }
+}
+
+// --- suite.checkout.CheckoutUseCaseIT ---
+package <basePackage>.suite.checkout;
+
+@Import(PostgresTestContainer.class)
+class CheckoutUseCaseIT extends CheckoutUseCase {
+  private final CheckoutServiceIntegrationTester tester = new CheckoutServiceIntegrationTester();
+  @Override
+  protected CheckoutServiceTester checkoutTester() { return tester; }
+}
+
+// --- infrastructure.secondary.repository.checkout.InMemoryOrderRepositorySpiImpl (UT) ---
+package <basePackage>.infrastructure.secondary.repository.checkout;
+
+public class InMemoryOrderRepositorySpiImpl implements OrderRepositorySpi {
+  private final InMemoryOrderRepository store = new InMemoryOrderRepository();
+  @Override
+  public Order save(Order order) { return store.save(order); }
+  public void clear() { store.clear(); }
+}
+
+// --- testutil.fluent.checkout.CheckoutTesterResult ---
+package <basePackage>.testutil.fluent.checkout;
+
+public record CheckoutTesterResult(CheckoutResponse actual) {
+  public static CheckoutTesterResult of(CheckoutResponse response) { return new CheckoutTesterResult(response); }
+  public CheckoutTesterResult assertStatusPaid() { /* … */ return this; }
+  public CheckoutTesterResult assertOutboxHasEvent(String type) { /* … */ return this; }
+}
+      """
+    }
+  }
+}

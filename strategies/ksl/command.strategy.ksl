@@ -1,0 +1,110 @@
+strategy_skeleton 1.0
+
+strategy "Command" {
+  id = "command"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Encapsuler une requête comme objet pour paramétrer, mettre en file,
+    journaliser ou annuler des opérations.
+    """
+  }
+
+  applicability {
+    signals = ["undo", "queue", "transaction step", "macro", "async job"]
+  }
+
+  participants {
+    participant "Command" {
+      kind = "contract"
+      responsibility = "execute() ; optional undo()."
+    }
+    participant "ConcreteCommand" {
+      kind = "implementation"
+      multiplicity = "one_or_more"
+      responsibility = "Lie Receiver et paramètres ; exécute l'action."
+    }
+    participant "Invoker" {
+      kind = "scheduler"
+      responsibility = "Déclenche Command sans connaître Receiver."
+    }
+    participant "Receiver" {
+      kind = "domain_target"
+      responsibility = "Porte la logique métier réelle."
+    }
+  }
+
+  relations {
+    relation "ConcreteCommand" -> "Command" { type = "implements" }
+    relation "ConcreteCommand" -> "Receiver" { type = "uses" }
+    relation "Invoker" -> "Command" { type = "runs" }
+  }
+
+  algorithm {
+    step 1 { action = "Construire ConcreteCommand avec Receiver et args." }
+    step 2 { action = "Invoker stocke ou exécute immédiatement." }
+    step 3 { action = "ConcreteCommand.invoke Receiver." }
+    step 4 { condition = "undo supported" action = "ConcreteCommand restaure état via Receiver." }
+  }
+
+  generation {
+    required = ["Command", "ConcreteCommand", "Invoker", "Receiver"]
+    optional = ["undo stack", "command history", "idempotency key"]
+    forbidden = [
+      "Invoker avec logique métier du Receiver",
+      "undo sans snapshot ou inverse documenté",
+      "Command sans paramètres immuables"
+    ]
+  }
+
+  tests {
+    assertion "execute" {
+      verifies = "execute() produit l'effet métier attendu sur Receiver."
+    }
+    assertion "undo" {
+      applies_when = "undo declared"
+      verifies = "undo() restaure l'état ou compense l'effet."
+    }
+  }
+
+  composition {
+    compatible = ["Memento", "Chain of Responsibility", "TransactionalOutbox"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.workflow.command.cart;
+
+public interface CartCommand {
+  void execute();
+  void undo();
+}
+
+public final class AddCartLineCommand implements CartCommand {
+  private final CartRepositorySpi carts;
+  private final CartId cartId;
+  private final CartLine line;
+
+  public AddCartLineCommand(CartRepositorySpi carts, CartId cartId, CartLine line) {
+    this.carts = carts;
+    this.cartId = cartId;
+    this.line = line;
+  }
+
+  @Override
+  public void execute() {
+    carts.addLine(cartId, line);
+  }
+
+  @Override
+  public void undo() {
+    carts.removeLine(cartId, line.id());
+  }
+}
+      """
+    }
+  }
+}

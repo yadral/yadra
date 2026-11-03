@@ -1,0 +1,110 @@
+strategy_skeleton 1.0
+
+strategy "Strategy" {
+  id = "strategy-pattern"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Encapsuler des algorithmes interchangeables derrière un même contrat afin
+    que le contexte puisse sélectionner un comportement sans conditions métier
+    dispersées.
+    """
+  }
+
+  applicability {
+    signals = ["algorithm variants", "runtime choice", "replace conditional", "policy"]
+  }
+
+  participants {
+    participant "Context" {
+      kind = "consumer"
+      responsibility = "Délègue l'algorithme et conserve le flux métier commun."
+    }
+    participant "Strategy" {
+      kind = "contract"
+      responsibility = "Définit les entrées et sorties communes aux variantes."
+    }
+    participant "ConcreteStrategy" {
+      kind = "algorithm"
+      multiplicity = "two_or_more"
+      responsibility = "Implémente une variante sans connaître les autres variantes."
+    }
+    participant "Selector" {
+      kind = "policy"
+      responsibility = "Choisit une Strategy à partir d'un contexte explicite."
+    }
+  }
+
+  relations {
+    relation "Context" -> "Strategy" { type = "delegates_to" }
+    relation "ConcreteStrategy" -> "Strategy" { type = "implements" }
+    relation "Selector" -> "Strategy" { type = "selects" }
+  }
+
+  algorithm {
+    step 1 { action = "Selector détermine la variante à partir de données explicites." }
+    step 2 { action = "Context reçoit Strategy par injection ou paramètre." }
+    step 3 { action = "Context délègue l'étape variable via Strategy." }
+    step 4 { action = "Context poursuit le flux commun avec le résultat contractuel." }
+  }
+
+  generation {
+    required = ["Context", "Strategy", "at least two ConcreteStrategy", "Selector"]
+    optional = ["default strategy", "strategy registry"]
+    forbidden = [
+      "Dupliquer le flux commun dans ConcreteStrategy",
+      "Sélectionner par réflexion implicite non documentée",
+      "Ajouter un switch sur les variantes dans Context"
+    ]
+  }
+
+  tests {
+    assertion "interchangeability" {
+      verifies = "Toute ConcreteStrategy respecte le même contrat d'entrée/sortie."
+    }
+    assertion "selection" {
+      verifies = "Selector choisit la variante attendue pour chaque contexte."
+    }
+    assertion "context" {
+      verifies = "Context ne dépend d'aucune ConcreteStrategy."
+    }
+  }
+
+  composition {
+    compatible = ["Factory Method", "State", "Template Method"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.workflow.pricing;
+
+public interface CheckoutDiscountPolicy {
+  Money apply(Money cartTotal, CustomerProfile customer);
+}
+
+@Component
+public class VipCheckoutDiscount implements CheckoutDiscountPolicy {
+  @Override
+  public Money apply(Money cartTotal, CustomerProfile customer) {
+    if (customer.isVip()) {
+      return cartTotal.multiply(new BigDecimal("0.90"));
+    }
+    return cartTotal;
+  }
+}
+
+@RequiredArgsConstructor
+public class CheckoutPricingService {
+  private final CheckoutDiscountPolicy discountPolicy;
+
+  public Money totalFor(Cart cart, CustomerProfile customer) {
+    return discountPolicy.apply(cart.subtotal(), customer);
+  }
+}
+      """
+    }
+  }
+}

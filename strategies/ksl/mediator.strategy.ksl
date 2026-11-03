@@ -1,0 +1,92 @@
+strategy_skeleton 1.0
+
+strategy "Mediator" {
+  id = "mediator"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Centraliser les interactions complexes entre composants pour qu'ils
+    communiquent via un médiateur au lieu de se référencer mutuellement.
+    """
+  }
+
+  applicability {
+    signals = ["many-to-many coupling", "workflow hub", "chat room", "orchestration"]
+  }
+
+  participants {
+    participant "Mediator" {
+      kind = "hub_contract"
+      responsibility = "Déclare notify/colleagueChanged et route les messages."
+    }
+    participant "ConcreteMediator" {
+      kind = "implementation"
+      responsibility = "Connaît les Colleague ; applique les règles de coordination."
+    }
+    participant "Colleague" {
+      kind = "participant_contract"
+      multiplicity = "two_or_more"
+      responsibility = "Notifie Mediator ; reçoit callbacks du Mediator."
+    }
+    participant "ConcreteColleague" {
+      kind = "implementation"
+      multiplicity = "two_or_more"
+      responsibility = "Comportement local ; pas de lien direct vers autres Colleague."
+    }
+  }
+
+  relations {
+    relation "ConcreteMediator" -> "Mediator" { type = "implements" }
+    relation "ConcreteColleague" -> "Colleague" { type = "implements" }
+    relation "ConcreteColleague" -> "Mediator" { type = "notifies" }
+    relation "ConcreteMediator" -> "ConcreteColleague" { type = "coordinates" }
+  }
+
+  generation {
+    required = ["Mediator", "ConcreteMediator", "Colleague", "ConcreteColleague"]
+    optional = ["event types", "async dispatch"]
+    forbidden = [
+      "ConcreteColleague référence directement un autre ConcreteColleague",
+      "Mediator avec logique métier lourde (préférer domain service + Mediator thin)",
+      "God Mediator sans découpage par use case"
+    ]
+  }
+
+  tests {
+    assertion "decoupling" {
+      verifies = "Changer un Colleague ne recompile pas les autres pairs."
+    }
+    assertion "routing" {
+      verifies = "Mediator applique les règles de broadcast/documentées."
+    }
+  }
+
+  composition {
+    compatible = ["Observer", "Facade", "Command"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.workflow.checkout;
+
+@Component
+@RequiredArgsConstructor
+public class CheckoutMediator {
+  private final CartRepositorySpi carts;
+  private final PaymentGatewaySpi payment;
+  private final OrderRepositorySpi orders;
+
+  public CheckoutResult checkout(CheckoutCommand command) {
+    carts.lock(command.cartId());
+    payment.authorize(command.toPayment());
+    Order order = orders.save(Order.paid(command.cartId()));
+    return CheckoutResult.from(order);
+  }
+}
+      """
+    }
+  }
+}

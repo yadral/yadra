@@ -1,0 +1,117 @@
+strategy_skeleton 1.0
+
+strategy "Observer" {
+  id = "observer"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Propager un changement d'état d'un sujet à des abonnés indépendants, sans
+    coupler le sujet aux réactions concrètes.
+    """
+  }
+
+  applicability {
+    signals = ["subscription", "state change", "notification", "one-to-many"]
+  }
+
+  participants {
+    participant "Subject" {
+      kind = "publisher"
+      responsibility = "Maintient les abonnements et publie les changements."
+    }
+    participant "Observer" {
+      kind = "contract"
+      responsibility = "Définit la notification reçue par tout abonné."
+    }
+    participant "ConcreteObserver" {
+      kind = "subscriber"
+      multiplicity = "zero_or_more"
+      responsibility = "Réagit à la notification sans modifier Subject directement."
+    }
+    participant "Event" {
+      kind = "immutable_message"
+      responsibility = "Transporte le changement nécessaire, sans état mutable partagé."
+    }
+  }
+
+  relations {
+    relation "Subject" -> "Observer" { type = "notifies_many" }
+    relation "ConcreteObserver" -> "Observer" { type = "implements" }
+    relation "Subject" -> "Event" { type = "publishes" }
+  }
+
+  algorithm {
+    step 1 { action = "Un Observer s'abonne ou se désabonne explicitement." }
+    step 2 { action = "Subject change d'état et crée un Event." }
+    step 3 { action = "Subject notifie un snapshot de ses abonnés." }
+    step 4 { action = "Chaque ConcreteObserver traite Event indépendamment." }
+  }
+
+  generation {
+    required = ["Subject", "Observer", "Event", "subscription lifecycle"]
+    optional = ["ConcreteObserver", "error policy", "ordering policy"]
+    forbidden = [
+      "Référencer un ConcreteObserver depuis Subject",
+      "Exposer une collection d'abonnés mutable",
+      "Supposer un ordre ou une transaction sans politique explicite"
+    ]
+  }
+
+  tests {
+    assertion "subscription" {
+      verifies = "Seuls les abonnés actifs reçoivent Event."
+    }
+    assertion "isolation" {
+      verifies = "La réaction d'un Observer ne change pas le contrat des autres."
+    }
+    assertion "lifecycle" {
+      verifies = "Le désabonnement empêche toute notification ultérieure."
+    }
+  }
+
+  composition {
+    compatible = ["Mediator", "Command", "TransactionalOutbox"]
+  }
+
+  examples {
+    java {
+      """
+// Après commit outbox / domaine — notifier listeners in-process (distinct du broker Kafka)
+
+package <basePackage>.domain.model.order;
+
+public interface OrderPaidListener {
+  void onOrderPaid(OrderPaidEvent event);
+}
+
+@Component
+public class OrderEventPublisher {
+  private final List<OrderPaidListener> listeners = new CopyOnWriteArrayList<>();
+
+  public void subscribe(OrderPaidListener listener) {
+    listeners.add(listener);
+  }
+
+  public void publish(OrderPaidEvent event) {
+    for (OrderPaidListener listener : listeners) {
+      listener.onOrderPaid(event);
+    }
+  }
+}
+
+@Component
+@RequiredArgsConstructor
+public class SendReceiptOnOrderPaid implements OrderPaidListener {
+  private final ReceiptService receiptService;
+
+  @Override
+  public void onOrderPaid(OrderPaidEvent event) {
+    receiptService.archiveReceipt(event.orderId());
+  }
+}
+      """
+    }
+  }
+}

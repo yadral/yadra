@@ -1,0 +1,79 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/public.tmLanguage-json/master/tmlanguage.json",
+  "name": "KSL",
+  "scopeName": "source.ksl",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.ksl",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.triple.ksl",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "applyEndPatternLast": true
+        },
+        {
+          "name": "string.quoted.double.ksl",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ksl",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.ksl",
+          "match": "\\b(isl|project|module|spec|usecase|flow|api|term|service)\\b"
+        },
+        {
+          "name": "keyword.declaration.ksl",
+          "match": "\\b(meta|repo|stack|dependencies|communications|openapi|contract|intention|intent|scope|flows|integrations|messaging|storage|data|usecases|outputs|strategies|strategy|budget|references|vocabulary|docs|e2e)\\b"
+        },
+        {
+          "name": "support.type.ksl",
+          "match": "\\b(postgres|mysql|mariadb|bigquery|snowflake|redis|kafka|rabbit|sqs|s3|gcs|blob)\\b"
+        },
+        {
+          "name": "variable.other.property.ksl",
+          "match": "\\b(kind|version|parent|modules|module|related_specs|depends_on_modules|specs|included|excluded|ref|action|breaking_changes|description|type|endpoint|auth|doc|in_config|topic|role|exchange|queue|bucket|schema|database|dataset|project|kinds|targets|scenarios|mock_externals|swagger|redoc|confluence|update_jira|architecture|patterns|testing|outputs|notes|story|jira|protocol|client|config_key|given|when|then|expected|context|scenario|labels|target_service|name|path|framework|max_repair_loops|max_iterations|libs|test_fixtures|plugins|parent_build|parent_pom|bom|architecture_doc|version|breaking_changes|producer|consumer|both|image|url|notes|intent|contract|flow|build|runtime|framework|data|infra)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.ksl",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.ksl",
+          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,112 @@
+strategy_skeleton 1.0
+
+strategy "State" {
+  id = "state"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Modifier le comportement d'un objet quand son état interne change, en
+    déléguant les transitions à des classes State concrètes.
+    """
+  }
+
+  applicability {
+    signals = ["lifecycle", "workflow state", "finite states", "transition table"]
+  }
+
+  participants {
+    participant "Context" {
+      kind = "stateful_entity"
+      responsibility = "Tient currentState ; délègue les opérations à State."
+    }
+    participant "State" {
+      kind = "contract"
+      responsibility = "handle(event, context) ; optional entry/exit."
+    }
+    participant "ConcreteState" {
+      kind = "implementation"
+      multiplicity = "two_or_more"
+      responsibility = "Transitions vers autres ConcreteState explicites."
+    }
+  }
+
+  relations {
+    relation "Context" -> "State" { type = "delegates_to" }
+    relation "ConcreteState" -> "State" { type = "implements" }
+    relation "ConcreteState" -> "Context" { type = "may_transition" }
+  }
+
+  algorithm {
+    step 1 { action = "Context reçoit un événement métier." }
+    step 2 { action = "currentState.handle détermine effet et prochain état." }
+    step 3 { action = "Context.setState si transition ; entry/exit hooks." }
+  }
+
+  generation {
+    required = ["Context", "State", "at least two ConcreteState"]
+    optional = ["transition diagram in spec", "illegal transition policy"]
+    forbidden = [
+      "Switch géant sur enum dans Context pour tout comportement",
+      "État invalide sans exception ou UNDECIDABLE explicite",
+      "ConcreteState qui mute Context sans setState"
+    ]
+  }
+
+  tests {
+    assertion "transitions" {
+      verifies = "Chaque transition autorisée de la spec est testée."
+    }
+    assertion "illegal" {
+      verifies = "Événement interdit dans l'état courant est rejeté."
+    }
+  }
+
+  composition {
+    compatible = ["Strategy", "Command", "Validator"]
+  }
+
+  examples {
+    java {
+      """
+// spec: PAID · PAYMENT_REJECTED · usecase payment-declined
+
+package <basePackage>.domain.model.order;
+
+public interface OrderState {
+  void markPaid(Order order);
+  void markPaymentRejected(Order order);
+}
+
+public final class AwaitingPaymentState implements OrderState {
+  @Override
+  public void markPaid(Order order) {
+    order.transitionTo(new PaidState());
+  }
+
+  @Override
+  public void markPaymentRejected(Order order) {
+    order.transitionTo(new PaymentRejectedState());
+  }
+}
+
+public final class Order {
+  private OrderState state = new AwaitingPaymentState();
+
+  void transitionTo(OrderState next) {
+    this.state = next;
+  }
+
+  public void onPaymentAuthorized() {
+    state.markPaid(this);
+  }
+
+  public void onPaymentDeclined() {
+    state.markPaymentRejected(this);
+  }
+}
+      """
+    }
+  }
+}

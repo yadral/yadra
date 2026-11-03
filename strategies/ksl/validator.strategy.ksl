@@ -1,0 +1,168 @@
+strategy_skeleton 1.0
+
+strategy "Validator" {
+  id = "validator"
+  family = "domain"
+  implementation_language = "project"
+  reference_profile = "tontine"
+
+  intent {
+    """
+    Appliquer les contraintes prévues dans la spec KSL sur les formulaires /
+    commandes reçus (payload entrant) avant tout effet de bord : rejeter tôt
+    avec erreurs structurées alignées sur les scénarios de rejet du spec.
+    """
+  }
+
+  applicability {
+    signals = ["validation", "invariant", "boundary", "reject", "form", "request", "payload", "precondition"]
+  }
+
+  ksl_traceability {
+    rule = "Chaque règle implémentée doit être traçable vers la spec."
+    sources = [
+      "strategy Validator { description } dans le spec",
+      "usecases (given, when, then) — nominal et cas de rejet",
+      "intention / scope.included (formulations de contraintes)",
+      "openapi { … } ou contrat API référencé si présent"
+    ]
+    not_in_ksl = "Ne pas inventer de contraintes absentes du spec ; question utilisateur en T1 · A si ambigu."
+  }
+
+  participants {
+    participant "InboundForm" {
+      kind = "request_payload"
+      responsibility = "Données envoyées par le client (REST body, GraphQL input, command DTO) après parsing adapter."
+    }
+    participant "UseCase" {
+      kind = "application_service"
+      responsibility = "Construit le sujet de validation ; appelle Validator avant persistence et appels externes."
+    }
+    participant "Validator" {
+      kind = "domain_policy"
+      responsibility = "Vérifie InboundForm + contexte d'exécution contre les contraintes KSL de la feature."
+    }
+    participant "ValidationSubject" {
+      kind = "validation_input"
+      responsibility = "Agrège InboundForm, ids de route, tenant/context, état déjà chargé si la spec l'exige."
+    }
+    participant "ValidationOutcome" {
+      kind = "result_or_exception"
+      responsibility = "Succès ou échec avec codes/champs attendus par les then de rejet du spec."
+    }
+    participant "OutboundSpi" {
+      kind = "port"
+      optional = true
+      responsibility = "Lecture seule (existence, stock, ownership) uniquement si une contrainte KSL le requiert."
+    }
+  }
+
+  relations {
+    relation "InboundForm" -> "ValidationSubject" { type = "feeds" }
+    relation "UseCase" -> "Validator" { type = "invokes_before_side_effects" }
+    relation "Validator" -> "ValidationSubject" { type = "checks_against_ksl_rules" }
+    relation "Validator" -> "ValidationOutcome" { type = "returns_or_throws" }
+    relation "Validator" -> "OutboundSpi" { type = "reads_optional" }
+  }
+
+  algorithm {
+    step 1 { action = "Adapter parse → InboundForm ; UseCase assemble ValidationSubject." }
+    step 2 { action = "Validator applique règles dérivées du spec (format, champs obligatoires, bornes, combinaisons)." }
+    step 3 { action = "Si spec : règles contextuelles (panier non vide, stock, statut) via SPI lecture seule." }
+    step 4 { action = "Échec → ValidationOutcome ; pas de payment, persistence, messaging." }
+    step 5 { action = "Succès → UseCase enchaîne orchestration métier documentée dans when." }
+  }
+
+  generation {
+    required = [
+      "Validator",
+      "mapping spec constraints → checks (commentaire ou table en spec strategy description)",
+      "ValidationOutcome aligned with rejection usecases",
+      "UseCase calls Validator before side effects"
+    ]
+    optional = ["field-level errors for form fields", "shared validators across usecases of same module"]
+    naming_tontine = ["domain.validator.<Feature>Validator"]
+    forbidden = [
+      "Contraintes non mentionnées dans le spec KSL",
+      "Validation métier uniquement dans adapter sans Validator",
+      "Persistence ou gateway avant Validator terminé",
+      "Annotations framework seules sans lien aux usecases KSL",
+      "Dupliquer les mêmes règles dans Populator/Converter (format/structure) et Validator (métier) sans frontière claire",
+      "Validator qui mute l'état ou exécute le use case entier"
+    ]
+  }
+
+  tests {
+    assertion "ksl-rejection-scenarios" {
+      verifies = "Chaque usecase de rejet (ou then d'échec) du spec a un test FluentCase / unitaire Validator."
+    }
+    assertion "reject-before-write" {
+      verifies = "Payload invalide : aucun effet persistence/SPI de mutation."
+    }
+    assertion "field-errors" {
+      verifies = "Erreurs renvoient champs/codes cohérents avec contrat API si spec le décrit."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "Populator/Converter", "FluentCaseTest", "SOLID"]
+    note = "Populator/Converter : forme et mapping couche ; Validator : contraintes métier et rejet spec."
+  }
+
+  examples {
+    java {
+      """
+// Même fil que hexagonal.strategy.ksl (order-checkout)
+// InboundForm = infrastructure.primary.rest.dto.checkout.CheckoutRequest
+// FluentCaseTest: thenExpectValidationError("cart", "insufficient_stock")
+
+package <basePackage>.domain.validator.checkout;
+
+import <basePackage>.domain.model.cart.Cart;
+import <basePackage>.domain.spi.CartRepositorySpi;
+import <basePackage>.infrastructure.primary.rest.dto.checkout.CheckoutRequest;
+
+@RequiredArgsConstructor
+public class CheckoutValidator {
+  private final CartRepositorySpi carts;
+
+  public void validate(CheckoutRequest request) {
+    if (request.getCartId() == null) {
+      throw validationError("cartId", "required");
+    }
+    Cart cart = carts.findById(request.getCartId())
+        .orElseThrow(() -> validationError("cartId", "not_found"));
+    if (cart.isEmpty()) {
+      throw validationError("cart", "must_not_be_empty");
+    }
+    if (!cart.hasAvailableStock()) {
+      throw validationError("cart", "insufficient_stock");
+    }
+  }
+
+  private ValidationException validationError(String field, String code) {
+    return new ValidationException(field, code);
+  }
+}
+
+package <basePackage>.domain.validator;
+
+public class ValidationException extends RuntimeException {
+  private final String field;
+  private final String code;
+  public ValidationException(String field, String code) {
+    super(field + ":" + code);
+    this.field = field;
+    this.code = code;
+  }
+  public String getField() { return field; }
+  public String getCode() { return code; }
+}
+
+// domain.workflow.api.checkout.CheckoutService.checkout:
+//   validator.validate(request);
+//   paymentGateway.authorize(...);  // jamais avant validate()
+      """
+    }
+  }
+}

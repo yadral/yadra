@@ -1,0 +1,107 @@
+strategy_skeleton 1.0
+
+strategy "AsyncRequest-PollingStatus" {
+  id = "async-polling-status"
+  family = "async"
+  implementation_language = "project"
+
+  intent {
+    """
+    Exposer une ressource de statut (job/task) interrogeable par le client jusqu'à
+    un état terminal, après acceptation asynchrone de la requête initiale.
+    """
+  }
+
+  applicability {
+    signals = ["polling", "status", "job id", "task", "202", "progress"]
+  }
+
+  participants {
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "POST/PUT initial puis GET répétés sur /jobs/{id} ou équivalent."
+    }
+    participant "JobSubmissionAPI" {
+      kind = "primary_adapter"
+      responsibility = "Crée jobId, état QUEUED/PENDING, retourne location header ou corps."
+    }
+    participant "JobRepository" {
+      kind = "port"
+      responsibility = "jobId, status, progress optional, result/error, timestamps."
+    }
+    participant "JobProcessor" {
+      kind = "processor"
+      responsibility = "Fait avancer status ; écrit result ou error en terminal."
+    }
+    participant "StatusQueryAPI" {
+      kind = "primary_adapter"
+      responsibility = "GET read-only ; 404 si inconnu ; pas de mutation métier."
+    }
+  }
+
+  relations {
+    relation "Client" -> "JobSubmissionAPI" { type = "creates_job" }
+    relation "JobSubmissionAPI" -> "JobRepository" { type = "inserts" }
+    relation "JobProcessor" -> "JobRepository" { type = "updates" }
+    relation "Client" -> "StatusQueryAPI" { type = "polls" }
+    relation "StatusQueryAPI" -> "JobRepository" { type = "reads" }
+  }
+
+  algorithm {
+    step 1 { action = "Soumission → jobId + statut initial + URL de polling documentée." }
+    step 2 { action = "JobProcessor met à jour RUNNING et progression si spec." }
+    step 3 { action = "Client poll StatusQueryAPI jusqu'à DONE/FAILED ou timeout client." }
+  }
+
+  generation {
+    required = ["JobSubmissionAPI", "JobRepository", "JobProcessor", "StatusQueryAPI", "status enum"]
+    optional = ["Retry-After header", "progress percentage", "cancel endpoint"]
+    forbidden = [
+      "GET status qui déclenche le traitement (side effect)",
+      "Statuts ambigus sans machine à états documentée",
+      "jobId prédictible ou séquentiel sans contrôle d'accès si données sensibles",
+      "Résultat complet en GET alors que spec exige webhook séparé"
+    ]
+  }
+
+  tests {
+    assertion "lifecycle" {
+      verifies = "Transitions PENDING→RUNNING→terminal observables via StatusQueryAPI."
+    }
+    assertion "not-found" {
+      verifies = "jobId inconnu retourne 404 (ou politique spec)."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "State", "AsyncRequestReply-Correlation"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.infrastructure.primary.rest.checkout;
+
+@RestController
+@RequiredArgsConstructor
+public class CheckoutJobController {
+  private final CheckoutJobRepository jobRepository;
+
+  @PostMapping("/checkout/jobs")
+  public ResponseEntity<Void> startCheckout(@RequestBody CheckoutRequest request) {
+    UUID jobId = jobRepository.insertQueued(request);
+    return ResponseEntity.accepted()
+        .location(URI.create("/checkout/jobs/" + jobId))
+        .build();
+  }
+
+  @GetMapping("/checkout/jobs/{jobId}")
+  public CheckoutJobStatusResponse poll(@PathVariable UUID jobId) {
+    return jobRepository.findStatus(jobId)
+        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+  }
+}
+      """
+    }
+  }
+}

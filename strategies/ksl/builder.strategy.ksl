@@ -1,0 +1,122 @@
+strategy_skeleton 1.0
+
+strategy "Builder" {
+  id = "builder"
+  family = "creational"
+  implementation_language = "project"
+
+  intent {
+    """
+    Construire un objet complexe étape par étape en séparant la construction
+    de sa représentation finale.
+    """
+  }
+
+  applicability {
+    signals = ["many optional parts", "stepwise construction", "immutable result", "fluent api"]
+  }
+
+  participants {
+    participant "Builder" {
+      kind = "construction_contract"
+      responsibility = "Déclare les étapes de construction et produit le résultat."
+    }
+    participant "ConcreteBuilder" {
+      kind = "implementation"
+      responsibility = "Accumule l'état intermédiaire et assemble le produit."
+    }
+    participant "Director" {
+      kind = "orchestrator"
+      optional = true
+      responsibility = "Enchaîne les appels Builder selon un scénario fixe."
+    }
+    participant "Product" {
+      kind = "complex_object"
+      responsibility = "Résultat immuable ou cohérent après build()."
+    }
+  }
+
+  relations {
+    relation "ConcreteBuilder" -> "Builder" { type = "implements" }
+    relation "Director" -> "Builder" { type = "uses_optional" }
+    relation "ConcreteBuilder" -> "Product" { type = "builds" }
+  }
+
+  algorithm {
+    step 1 { action = "Réinitialiser ou créer ConcreteBuilder." }
+    step 2 { action = "Appeler les étapes with/set/add dans un ordre validé." }
+    step 3 { action = "Valider les invariants avant build()." }
+    step 4 { action = "Retourner Product ; rejeter si incomplet." }
+  }
+
+  generation {
+    required = ["Builder", "ConcreteBuilder", "Product", "build()"]
+    optional = ["Director", "fluent self-return"]
+    forbidden = [
+      "Exposer l'état partiel comme Product final",
+      "Constructor telescoping avec dix paramètres optionnels",
+      "Logique métier lourde dans Director"
+    ]
+  }
+
+  tests {
+    assertion "incremental" {
+      verifies = "Chaque étape enrichit le produit sans le publier prématurément."
+    }
+    assertion "invalid-build" {
+      verifies = "build() échoue si des champs obligatoires manquent."
+    }
+  }
+
+  composition {
+    compatible = ["Factory Method", "Abstract Factory", "FluentCaseTest"]
+  }
+
+  examples {
+    java {
+      """
+// participant: ConcreteBuilder · Product = Order
+
+package <basePackage>.domain.model.order;
+
+public final class Order {
+  private final OrderId id;
+  private final List<OrderLine> lines;
+  private final Money total;
+
+  private Order(Builder builder) {
+    this.id = builder.id;
+    this.lines = List.copyOf(builder.lines);
+    this.total = builder.total;
+  }
+
+  public static final class Builder {
+    private OrderId id;
+    private final List<OrderLine> lines = new ArrayList<>();
+    private Money total = Money.zero();
+
+    public Builder id(OrderId id) {
+      this.id = id;
+      return this;
+    }
+
+    public Builder addLine(OrderLine line) {
+      lines.add(line);
+      total = total.add(line.lineTotal());
+      return this;
+    }
+
+    public Order build() {
+      if (id == null || lines.isEmpty()) {
+        throw new IllegalStateException("Order id and at least one line required");
+      }
+      return new Order(this);
+    }
+  }
+}
+
+// Order order = new Order.Builder().id(id).addLine(line).build();
+      """
+    }
+  }
+}

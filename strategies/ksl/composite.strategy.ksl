@@ -1,0 +1,101 @@
+strategy_skeleton 1.0
+
+strategy "Composite" {
+  id = "composite"
+  family = "structural"
+  implementation_language = "project"
+
+  intent {
+    """
+    Composer des objets en structures arborescentes et traiter feuilles et
+    conteneurs uniformément via un contrat Component commun.
+    """
+  }
+
+  applicability {
+    signals = ["tree", "hierarchy", "part-whole", "nested aggregate"]
+  }
+
+  participants {
+    participant "Component" {
+      kind = "uniform_contract"
+      responsibility = "Opérations communes (ex. render, sum, validate) pour feuille et nœud."
+    }
+    participant "Leaf" {
+      kind = "terminal"
+      responsibility = "Composant sans enfant ; implémente le comportement terminal."
+    }
+    participant "Composite" {
+      kind = "container"
+      responsibility = "Contient des Component ; délègue ou agrège."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Manipule Component sans distinguer Leaf et Composite."
+    }
+  }
+
+  relations {
+    relation "Leaf" -> "Component" { type = "implements" }
+    relation "Composite" -> "Component" { type = "implements" }
+    relation "Composite" -> "Component" { type = "contains_many" }
+    relation "Client" -> "Component" { type = "uses" }
+  }
+
+  algorithm {
+    step 1 { action = "Client invoque une opération sur la racine Component." }
+    step 2 { action = "Leaf exécute localement ; Composite propage aux enfants." }
+    step 3 { action = "Agréger ou propager le résultat selon la sémantique métier." }
+  }
+
+  generation {
+    required = ["Component", "Leaf", "Composite"]
+    optional = ["child add/remove", "cycle detection"]
+    forbidden = [
+      "instanceof Leaf/Composite dans Client",
+      "Composite sans garde sur profondeur ou cycles si risque métier",
+      "Opération vide sur Composite qui ignore les enfants"
+    ]
+  }
+
+  tests {
+    assertion "uniformity" {
+      verifies = "Même opération sur feuille seule et sous-arbre équivalent."
+    }
+    assertion "structure" {
+      verifies = "add/remove respecte l'invariant d'arbre documenté."
+    }
+  }
+
+  composition {
+    compatible = ["Iterator", "Visitor", "Decorator"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.model.cart;
+
+public interface CartComponent {
+  Money subtotal();
+}
+
+public final class CartLineLeaf implements CartComponent {
+  private final CartLine line;
+  public CartLineLeaf(CartLine line) { this.line = line; }
+  @Override
+  public Money subtotal() { return line.lineTotal(); }
+}
+
+public final class CartBundle implements CartComponent {
+  private final List<CartComponent> children = new ArrayList<>();
+  public void add(CartComponent component) { children.add(component); }
+  @Override
+  public Money subtotal() {
+    return children.stream().map(CartComponent::subtotal).reduce(Money.zero(), Money::add);
+  }
+}
+      """
+    }
+  }
+}

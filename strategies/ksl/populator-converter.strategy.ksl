@@ -1,0 +1,290 @@
+strategy_skeleton 1.0
+
+strategy "Populator/Converter" {
+  id = "populator-converter"
+  family = "mapping"
+  implementation_language = "project"
+  reference_profile = "tontine"
+
+  intent {
+    """
+    Construire une réponse en deux temps : Converter contrôle le cycle de
+    conversion et Populator remplit la cible à partir de la source. Pour les
+    réponses enrichies, le mapper crée la base puis un resolver charge les
+    dépendances en lot avant leur population.
+    """
+  }
+
+  applicability {
+    signals = ["dto", "response", "mapping", "resolved references"]
+  }
+
+  project_binding {
+    source_language = "project.stack.runtime"
+    execution_model = "project.stack.execution"
+    single_result = "project.stack.execution.single"
+    stream_result = "project.stack.execution.stream"
+    rule = """
+    Le squelette ne choisit ni le synchrone, ni le réactif, ni l'asynchrone.
+    Les signatures concrètes et les primitives de résultat sont dérivées du
+    projet cible.
+    """
+  }
+
+  layout {
+    package "domain.converter" {
+      contains = [
+        "Populator",
+        "Converter",
+        "MappingContext",
+        "EntityDependencyResolver",
+        "EntityDependencyMapper"
+      ]
+    }
+    package "domain.converter.<feature>" {
+      contains = [
+        "<Entity>ToResponsePopulator",
+        "<Entity>ToResponseConverter"
+      ]
+    }
+    package "domain.mapper" {
+      contains = ["<Entity>Mapper"]
+    }
+    package "infrastructure.primary.rest.dto.<feature>" {
+      contains = ["<Entity>Dto"]
+    }
+  }
+
+  participants {
+    participant "Source" {
+      kind = "domain_model"
+      responsibility = "Fournir les données métier et les identifiants de dépendances."
+    }
+    participant "Target" {
+      kind = "response_dto"
+      responsibility = "Porter exclusivement la représentation de sortie."
+    }
+    participant "Populator" {
+      kind = "generic_contract"
+      signature = "populate(Source source, Target target) -> project_result<Target>"
+      responsibility = "Remplir ou enrichir Target selon le modèle d'exécution du projet."
+    }
+    participant "Converter" {
+      kind = "generic_orchestrator"
+      signatures = [
+        "convert(Source source) -> project_result<Target>",
+        "convert(project_stream<Source>) -> project_stream<Target>",
+        "withPopulator(Populator) -> Converter"
+      ]
+      responsibility = "Créer la cible, appeler Populator et préserver le modèle d'exécution du projet."
+    }
+    participant "ConcretePopulator" {
+      path = "domain.converter.<feature>.<Entity>ToResponsePopulator"
+      kind = "implementation"
+      responsibility = "Mapper la base puis enrichir les références résolues."
+    }
+    participant "ConcreteConverter" {
+      path = "domain.converter.<feature>.<Entity>ToResponseConverter"
+      kind = "specialization"
+      responsibility = "Configurer Converter avec le ConcretePopulator."
+    }
+    participant "Mapper" {
+      path = "domain.mapper.<Entity>Mapper"
+      kind = "structural_mapper"
+      responsibility = "Créer la représentation de base sans appel externe."
+    }
+    participant "DependencyResolver" {
+      path = "domain.converter.EntityDependencyResolver"
+      kind = "batch_resolver"
+      optional = true
+      responsibility = "Résoudre les entités référencées en lot et retourner MappingContext."
+    }
+    participant "MappingContext" {
+      path = "domain.converter.MappingContext"
+      kind = "typed_context"
+      optional = true
+      responsibility = "Stocker les dépendances résolues sous des clés explicites."
+    }
+    participant "DependencyMapper" {
+      path = "domain.converter.EntityDependencyMapper"
+      kind = "mapping_utility"
+      optional = true
+      responsibility = "Appliquer une référence ou une liste présente dans MappingContext."
+    }
+  }
+
+  relations {
+    relation "ConcreteConverter" -> "Converter" { type = "specializes" }
+    relation "ConcreteConverter" -> "ConcretePopulator" { type = "configures_with" }
+    relation "ConcretePopulator" -> "Populator" { type = "implements" }
+    relation "ConcretePopulator" -> "Mapper" { type = "uses" }
+    relation "ConcretePopulator" -> "DependencyResolver" { type = "uses_optional" }
+    relation "DependencyResolver" -> "MappingContext" { type = "produces" }
+    relation "ConcretePopulator" -> "DependencyMapper" { type = "uses_optional" }
+    relation "DependencyMapper" -> "MappingContext" { type = "reads" }
+  }
+
+  converter_algorithm {
+    step 1 {
+      condition = "source is absent"
+      action = "Retourner la représentation vide définie par le projet."
+    }
+    step 2 {
+      action = "Créer Target via target supplier, sauf si le profil délègue sa création au Mapper."
+    }
+    step 3 {
+      condition = "populator configured"
+      action = "Retourner populator.populate(source, target)."
+    }
+    step 4 {
+      condition = "no populator"
+      action = "Retourner Target selon le modèle d'exécution du projet."
+    }
+    step 5 {
+      condition = "project exposes a stream abstraction"
+      input = "project stream"
+      action = "Convertir chaque Source avec l'opérateur de composition approprié au projet."
+    }
+  }
+
+  populator_algorithm {
+    step 1 { action = "Mapper Source vers la base Target." }
+    step 2 {
+      condition = "dependencies declared"
+      action = "Résoudre toutes les références nécessaires en lot."
+    }
+    step 3 {
+      action = "Peupler uniquement les références présentes dans MappingContext."
+    }
+    step 4 { action = "Retourner Target selon le modèle d'exécution du projet." }
+  }
+
+  tontine_mapping_profile {
+    execution_binding = "project"
+    target_owner = "populator"
+    base_target = "Mapper.toDto(source)"
+    converter_supplier = "nullable placeholder accepted because Populator replaces target"
+    enrichment = "DependencyResolver -> MappingContext -> EntityDependencyMapper"
+    dependency_resolution = "batch and parallel when independent"
+    missing_reference = "leave target field absent; do not fail conversion by default"
+    annotation_profile = [
+      "ConcreteConverter is injectable component",
+      "ConcretePopulator is injectable component",
+      "ConcretePopulator uses constructor injection"
+    ]
+  }
+
+  generation {
+    required = [
+      "Populator",
+      "Converter",
+      "ConcretePopulator",
+      "ConcreteConverter",
+      "Mapper",
+      "Target"
+    ]
+    optional = [
+      "DependencyResolver",
+      "MappingContext",
+      "DependencyMapper"
+    ]
+    naming = [
+      "<Entity>ToResponsePopulator",
+      "<Entity>ToResponseConverter",
+      "<Entity>Mapper",
+      "<Entity>Dto"
+    ]
+    forbidden = [
+      "Créer Populator et Converter comme deux strategies séparées",
+      "Faire des appels repository dans Mapper",
+      "Retourner Source ou une entité de persistence comme Target",
+      "Résoudre chaque référence dans une boucle séquentielle N+1",
+      "Placer la logique métier dans Converter ou Populator",
+      "Contourner Converter en appelant ConcretePopulator depuis le controller"
+    ]
+  }
+
+  tests {
+    assertion "null-source" {
+      verifies = "Une source absente produit la valeur vide attendue par le projet."
+    }
+    assertion "base-mapping" {
+      verifies = "Mapper fournit tous les champs directs de Target."
+    }
+    assertion "resolved-dependencies" {
+      verifies = "Les références disponibles enrichissent Target avec la bonne clé."
+    }
+    assertion "missing-dependencies" {
+      verifies = "Une référence absente ne corrompt pas les champs déjà mappés."
+    }
+    assertion "stream" {
+      applies_when = "project.stack.execution.stream is defined"
+      verifies = "Chaque élément est converti sans casser le modèle d'exécution du projet."
+    }
+  }
+
+  composition {
+    required_with = ["Hexagonal"]
+    compatible = ["Adapter", "Facade", "Validator"]
+  }
+
+  examples {
+    java {
+      """
+// Même fil que hexagonal.strategy.ksl · domain.converter.<feature> + domain.mapper
+// Target = infrastructure.primary.rest.dto.checkout.OrderResponse (API, pas entité JPA)
+
+package <basePackage>.infrastructure.primary.rest.dto.checkout;
+
+public class OrderResponse {
+  private UUID orderId;
+  private String status;
+  private String receiptUrl;
+  private Instant paidAt;
+  // getters/setters
+}
+
+package <basePackage>.domain.mapper;
+
+@Component
+public class OrderEntityDependencyMapper {
+  public <T> T map(Order source, Class<T> targetType) { /* MapStruct / manual */ return null; }
+}
+
+package <basePackage>.domain.converter.checkout;
+
+import <basePackage>.domain.model.checkout.Order;
+import <basePackage>.infrastructure.primary.rest.dto.checkout.OrderResponse;
+
+@Component
+@RequiredArgsConstructor
+public class OrderToResponseConverter implements Converter<Order, OrderResponse> {
+  private final OrderToResponsePopulator populator;
+  private final OrderEntityDependencyMapper mapper;
+  private final OrderLineResolver resolver;
+
+  @Override
+  public OrderResponse convert(Order source) {
+    OrderResponse target = mapper.map(source, OrderResponse.class);
+    resolver.resolveLines(source, target);
+    populator.populate(source, target);
+    return target;
+  }
+}
+
+@Component
+public class OrderToResponsePopulator implements Populator<Order, OrderResponse> {
+  @Override
+  public void populate(Order source, OrderResponse target) {
+    target.setReceiptUrl(source.getReceiptUrl());
+    target.setPaidAt(source.getPaidAt());
+    target.setStatus(source.getStatus().name());
+  }
+}
+
+// CheckoutService (Hexagonal): return orderConverter.convert(order);
+// CheckoutApi signature peut utiliser CheckoutRequest / OrderResponse (tontine_profile.dto_policy)
+      """
+    }
+  }
+}

@@ -1,0 +1,19 @@
+ksl 1.0
+
+module "cart" {
+  service = "order-service"
+
+  meta {
+    name = "Cart Domain"
+    description = "Sous-domaine métier du panier actif, des lignes et des règles de persistance"
+  }
+
+  specs = [
+    "cart-management.spec.ksl"
+  ]
+
+  vocabulary {
+    term "Cart" = "Working set of items a customer intends to purchase"
+    term "CartLine" = "Single SKU quantity and unit price in the cart"
+  }
+}

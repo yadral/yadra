@@ -1,0 +1,28 @@
+{
+  "name": "kom-ksl",
+  "displayName": "Kom KSL",
+  "description": "Syntax highlighting for Kom Specification Language (.ksl)",
+  "version": "0.1.0",
+  "publisher": "yadral",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ksl",
+        "aliases": ["KSL", "Kom Specification Language", "ksl"],
+        "extensions": [".ksl"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ksl",
+        "scopeName": "source.ksl",
+        "path": "./syntaxes/ksl.tmLanguage.json"
+      }
+    ]
+  }
+}

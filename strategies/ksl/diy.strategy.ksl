@@ -1,0 +1,106 @@
+strategy_skeleton 1.0
+
+strategy "DIY" {
+  id = "diy"
+  family = "principles"
+  implementation_language = "project"
+
+  intent {
+    """
+    Do It Yourself — privilégier du code explicite dans le dépôt : câblage
+    visible des adapters, flux lisible, indirection minimale ; recourir aux
+    patterns catalogue seulement quand la spec l'exige.
+    """
+  }
+
+  applicability {
+    signals = ["diy", "explicit", "manual", "wiring", "framework-free", "simple", "minimal", "readable"]
+  }
+
+  participants {
+    participant "CompositionRoot" {
+      kind = "bootstrap"
+      responsibility = "Instancie adapters et services ; enregistre ports → implémentations."
+    }
+    participant "ApplicationCore" {
+      kind = "domain_and_usecases"
+      responsibility = "Reçoit dépendances par constructeur ou factory explicite documentée."
+    }
+    participant "PrimaryAdapter" {
+      kind = "inbound"
+      responsibility = "Traduit protocole entrant ; délègue aux ports API sans magie framework."
+    }
+    participant "SecondaryAdapter" {
+      kind = "outbound"
+      responsibility = "Implémente SPI avec code projet traçable."
+    }
+  }
+
+  relations {
+    relation "CompositionRoot" -> "ApplicationCore" { type = "wires" }
+    relation "CompositionRoot" -> "PrimaryAdapter" { type = "wires" }
+    relation "CompositionRoot" -> "SecondaryAdapter" { type = "wires" }
+    relation "PrimaryAdapter" -> "ApplicationCore" { type = "calls_ports_only" }
+    relation "ApplicationCore" -> "SecondaryAdapter" { type = "via_spi_only" }
+  }
+
+  generation {
+    required = ["CompositionRoot or equivalent explicit module", "constructors/factories visible in repo"]
+    optional = ["small hand-written factories", "README or comment only where spec allows"]
+    forbidden = [
+      "Génération opaque non versionnée remplaçant le wiring métier",
+      "Reflection globale ou service locator cachant les dépendances",
+      "Framework DI imposé sans traçabilité dans le code produit si spec dit DIY",
+      "Abstraction supplémentaire sans signal spec (YAGNI/KISS conflict)",
+      "Contournement de Hexagonal ou Outbox catalogue en « raccourci » inline"
+    ]
+  }
+
+  tests {
+    assertion "wiring-visible" {
+      verifies = "Tests d'intégration ou module test instancient le graphe sans container magique caché."
+    }
+    assertion "traceability" {
+      verifies = "Depuis un adapter primary, on atteint le use case en ≤ N sauts documentés."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "SOLID", "KISS", "YAGNI", "FluentCaseTest"]
+  }
+
+  examples {
+    java {
+      """
+// CompositionRoot explicite — pas de @Autowired field sur le domaine
+
+package <basePackage>.config;
+
+@Configuration
+public class CheckoutWiring {
+
+  @Bean
+  CheckoutApi checkoutApi(
+      CheckoutValidator validator,
+      OrderRepositorySpi orderRepository,
+      PaymentGatewaySpi paymentGateway,
+      OutboxWriter outboxWriter,
+      OrderToResponseConverter orderConverter) {
+    return new CheckoutService(
+        validator, orderRepository, paymentGateway, outboxWriter, orderConverter);
+  }
+
+  @Bean
+  OrderRepositorySpi orderRepositorySpi(OrderJpaRepository jpa) {
+    return new OrderRepositorySpiImpl(jpa);
+  }
+
+  @Bean
+  PaymentGatewaySpi paymentGatewaySpi(PaymentGatewayClient client) {
+    return new PaymentGatewayAdapter(client);
+  }
+}
+      """
+    }
+  }
+}

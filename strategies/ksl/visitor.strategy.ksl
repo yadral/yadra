@@ -1,0 +1,109 @@
+strategy_skeleton 1.0
+
+strategy "Visitor" {
+  id = "visitor"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Séparer un algorithme opérant sur une structure d'objets du type des
+    éléments visités, via double dispatch accept(Visitor).
+    """
+  }
+
+  applicability {
+    signals = ["traverse structure", "external operation", "ast", "report on tree"]
+  }
+
+  participants {
+    participant "Visitor" {
+      kind = "operation_contract"
+      responsibility = "visitConcreteElementA, visitConcreteElementB, …"
+    }
+    participant "ConcreteVisitor" {
+      kind = "implementation"
+      multiplicity = "one_or_more"
+      responsibility = "Opération métier ou export pour chaque type d'élément."
+    }
+    participant "Element" {
+      kind = "node_contract"
+      responsibility = "accept(Visitor)."
+    }
+    participant "ConcreteElement" {
+      kind = "node"
+      multiplicity = "two_or_more"
+      responsibility = "accept appelle visitConcreteElement correspondant."
+    }
+    participant "ObjectStructure" {
+      kind = "aggregate"
+      optional = true
+      responsibility = "Contient Elements ; peut parcourir pour Visitor."
+    }
+  }
+
+  relations {
+    relation "ConcreteVisitor" -> "Visitor" { type = "implements" }
+    relation "ConcreteElement" -> "Element" { type = "implements" }
+    relation "ConcreteElement" -> "Visitor" { type = "accept_dispatches" }
+    relation "ObjectStructure" -> "Element" { type = "contains_optional" }
+  }
+
+  generation {
+    required = ["Visitor", "ConcreteVisitor", "Element", "ConcreteElement", "accept"]
+    optional = ["ObjectStructure", "composite traversal"]
+    forbidden = [
+      "Ajouter une opération en modifiant tous les Element sans spec",
+      "Visitor qui mute la structure pendant parcours sans politique",
+      "instanceof à la place de accept/visit"
+    ]
+  }
+
+  tests {
+    assertion "dispatch" {
+      verifies = "Chaque ConcreteElement invoque la visit method correcte."
+    }
+    assertion "operation" {
+      verifies = "ConcreteVisitor produit le résultat attendu sur la structure fixture."
+    }
+  }
+
+  composition {
+    compatible = ["Composite", "Iterator", "Command"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.model.cart;
+
+public interface CartLineVisitor {
+  void visit(PhysicalCartLine line);
+  void visit(DigitalCartLine line);
+}
+
+public interface CartLine {
+  void accept(CartLineVisitor visitor);
+}
+
+public final class CartTotalVisitor implements CartLineVisitor {
+  private Money total = Money.zero();
+
+  @Override
+  public void visit(PhysicalCartLine line) {
+    total = total.add(line.lineTotalWithShipping());
+  }
+
+  @Override
+  public void visit(DigitalCartLine line) {
+    total = total.add(line.lineTotal());
+  }
+
+  public Money total() {
+    return total;
+  }
+}
+      """
+    }
+  }
+}

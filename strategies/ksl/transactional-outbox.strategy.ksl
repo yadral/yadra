@@ -1,0 +1,169 @@
+strategy_skeleton 1.0
+
+strategy "TransactionalOutbox" {
+  id = "transactional-outbox"
+  family = "messaging"
+  implementation_language = "project"
+  reference_profile = "tontine"
+
+  intent {
+    """
+    Garantir la publication d'événements sortants : persister le message dans
+    une table outbox dans la même transaction que l'écriture métier, puis le
+    relayer de façon asynchrone vers le broker (Kafka, etc.) sans perte si le
+    commit domaine réussit.
+    """
+  }
+
+  applicability {
+    signals = ["outbox", "async", "event", "kafka", "messaging", "domain event", "relay", "at-least-once"]
+  }
+
+  ksl_traceability {
+    rule = "Topics, payloads et moment d'émission viennent du spec KSL."
+    sources = [
+      "messaging { kafka | rabbit | … } description et topic",
+      "usecases when/then (append outbox, same transaction)",
+      "data { … } tables incluant outbox si outputs.data",
+      "strategy TransactionalOutbox { description }"
+    ]
+    alias_in_specs = "Certains specs écrivent strategy \"Outbox\" — nom canonique catalogue : TransactionalOutbox."
+  }
+
+  participants {
+    participant "UseCase" {
+      kind = "application_service"
+      responsibility = "Mutations domaine ; appelle OutboxWriter dans la même unité transactionnelle."
+    }
+    participant "OutboxWriter" {
+      kind = "domain_or_application_port"
+      responsibility = "Insère enregistrement outbox (type, payload, metadata, statut NEW)."
+    }
+    participant "OutboxStore" {
+      kind = "spi_persistence"
+      responsibility = "Table/collection outbox ; même TX que agrégat métier (spec data block)."
+    }
+    participant "OutboxRelay" {
+      kind = "secondary_process"
+      responsibility = "Poll ou CDC ; publie vers MessageBroker ; marque SENT ou retry."
+    }
+    participant "MessageBrokerAdapter" {
+      kind = "secondary_adapter"
+      responsibility = "Publie sur topic/queue déclaré dans spec messaging."
+    }
+    participant "DomainAggregateWrite" {
+      kind = "persistence"
+      responsibility = "Order, payment, etc. — commit atomique avec OutboxStore."
+    }
+  }
+
+  relations {
+    relation "UseCase" -> "DomainAggregateWrite" { type = "same_transaction" }
+    relation "UseCase" -> "OutboxWriter" { type = "same_transaction" }
+    relation "OutboxWriter" -> "OutboxStore" { type = "inserts" }
+    relation "OutboxRelay" -> "OutboxStore" { type = "reads_pending" }
+    relation "OutboxRelay" -> "MessageBrokerAdapter" { type = "publishes" }
+    relation "OutboxRelay" -> "OutboxStore" { type = "updates_status" }
+  }
+
+  algorithm {
+    step 1 { action = "UseCase valide (Validator) et applique mutation métier." }
+    step 2 { action = "OutboxWriter sérialise événement spec (ex. OrderPaid) → ligne outbox." }
+    step 3 { action = "Commit unique : agrégat + outbox ; échec broker n'empêche pas commit." }
+    step 4 { action = "OutboxRelay délivre vers broker ; retries + DLQ selon spec messaging." }
+    step 5 { action = "Consommateurs downstream idempotents (clé event/id spec)." }
+  }
+
+  generation {
+    required = [
+      "OutboxStore schema aligned with spec data",
+      "OutboxWriter invoked inside use case transaction",
+      "OutboxRelay or documented platform relay",
+      "MessageBrokerAdapter binding to spec topic"
+    ]
+    optional = ["dedup key", "partition key", "scheduled relay via Cronjob", "outbox cleanup policy"]
+    forbidden = [
+      "Publish broker directement dans la TX DB sans outbox quand spec exige outbox",
+      "Outbox insert hors transaction de l'écriture métier",
+      "Double publish sans statut outbox (SENT/FAILED)",
+      "Publier avant commit transaction",
+      "Ignorer messaging block du spec pour inventer un topic"
+    ]
+  }
+
+  tests {
+    assertion "atomic-commit" {
+      verifies = "Rollback métier → aucune ligne outbox ; commit → outbox row présente."
+    }
+    assertion "relay" {
+      verifies = "Relay traite NEW → message broker mock reçoit payload spec."
+    }
+    assertion "no-loss-on-broker-down" {
+      verifies = "Broker indisponible au commit : données persistées ; relay rattrape après."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "Validator", "Cronjob", "AsyncRequest-FireAndForget", "Command"]
+  }
+
+  examples {
+    java {
+      """
+// messaging.kafka topic orders.order-paid.v1 · data.postgres outbox_event · même @Transactional
+
+package <basePackage>.domain.workflow.api.checkout;
+
+@Service
+@RequiredArgsConstructor
+public class CheckoutService implements CheckoutApi {
+  private final OrderRepositorySpi orders;
+  private final OutboxWriter outboxWriter;
+
+  @Override
+  @Transactional
+  public CheckoutResponse checkout(CheckoutRequest request) {
+    Order order = orders.save(Order.paid(request.getCartId()));
+    outboxWriter.append(OutboxMessage.builder()
+        .eventType("OrderPaid")
+        .aggregateId(order.getId().toString())
+        .payload(Json.write(new OrderPaidEvent(order.getId(), order.getStatus())))
+        .topic("orders.order-paid.v1")
+        .build());
+    return toResponse(order);
+  }
+}
+
+package <basePackage>.infrastructure.secondary.jpa.outbox;
+
+@Component
+@RequiredArgsConstructor
+public class JpaOutboxWriter implements OutboxWriter {
+  private final OutboxEventRepository repository;
+  @Override
+  public void append(OutboxMessage message) {
+    repository.save(OutboxEventEntity.from(message));
+  }
+}
+
+package <basePackage>.infrastructure.secondary.messaging;
+
+@Component
+@RequiredArgsConstructor
+public class OutboxRelayJob {
+  private final OutboxEventRepository outbox;
+  private final KafkaTemplate<String, String> kafka;
+
+  @Scheduled(fixedDelayString = "${outbox.relay.delay-ms:5000}")
+  public void relayPending() {
+    outbox.findTop100ByStatus(OutboxStatus.NEW).forEach(row -> {
+      kafka.send(row.getTopic(), row.getPayload());
+      row.markSent();
+      outbox.save(row);
+    });
+  }
+}
+      """
+    }
+  }
+}

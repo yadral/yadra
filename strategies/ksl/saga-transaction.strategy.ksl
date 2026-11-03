@@ -1,0 +1,148 @@
+strategy_skeleton 1.0
+
+strategy "SagaTransaction" {
+  id = "saga-transaction"
+  family = "orchestration"
+  implementation_language = "project"
+  reference_profile = "multiflex"
+
+  intent {
+    """
+    Enchaîner des étapes async avec action et compensation par step ; en cas
+    d'échec, exécuter les compensations en ordre inverse. Encapsuler les steps
+    marqués transactionnels dans une frontière TX réactive ou synchrone selon stack.
+    """
+  }
+
+  applicability {
+    signals = ["saga", "compensation", "rollback", "orchestration", "multi-step", "distributed", "reactive transaction"]
+  }
+
+  reference_binding {
+    note = "Profil observé : orchestrateur prototype, steps typés action/compensation, flags TX par step, contexte transaction propagé sur flux — adapter au stack du projet."
+    roles_map = [
+      "SagaOrchestrator → newExecutor(input), addStep, execute → Mono<Void>",
+      "SagaStep → action(I→Mono<O>), compensation(O→Mono<Void>), transactionalAction/Compensation",
+      "TransactionBoundary → runInTransaction autour des Mono des steps flaggés",
+      "TransactionContext → identifiant corrélé dans contexte async (ex. Reactor context)",
+      "TransactionalMarker + aspect → commit/rollback autour Mono retourné"
+    ]
+  }
+
+  participants {
+    participant "SagaOrchestrator" {
+      kind = "orchestrator"
+      multiplicity = "prototype_or_scoped"
+      responsibility = "Liste ordonnée de SagaStep ; execute() enchaîne ; rollback on error."
+    }
+    participant "SagaStep" {
+      kind = "step_definition"
+      multiplicity = "one_or_more"
+      responsibility = "action forward, compensation backward ; flags transactional par step."
+    }
+    participant "TransactionBoundary" {
+      kind = "infrastructure"
+      responsibility = "Ouvre/commit/rollback TX pour Mono (ou équivalent) quand step.transactional* true."
+    }
+    participant "TransactionContext" {
+      kind = "correlation"
+      responsibility = "Propage transaction-id dans le flux async pour logging et corrélation."
+    }
+    participant "UseCaseSteps" {
+      kind = "domain_actions"
+      responsibility = "Implémentations métier injectées dans SagaStep ; pas de logique dans l'orchestrateur générique."
+    }
+  }
+
+  relations {
+    relation "SagaOrchestrator" -> "SagaStep" { type = "ordered_pipeline" }
+    relation "SagaStep" -> "UseCaseSteps" { type = "delegates_action_and_compensation" }
+    relation "SagaOrchestrator" -> "TransactionBoundary" { type = "wraps_when_flagged" }
+    relation "TransactionBoundary" -> "TransactionContext" { type = "propagates" }
+  }
+
+  algorithm {
+    step 1 { action = "SagaOrchestrator.execute() démarre step 0 avec input initial." }
+    step 2 { action = "action step N : TX si transactionalAction ; output devient input N+1." }
+    step 3 { action = "Stocker outputs intermédiaires pour compensations." }
+    step 4 { action = "Sur erreur : si step échoué était transactional → rollback index-1..0 via compensation." }
+    step 5 { action = "Compensation en ordre inverse ; log échec compensation sans masquer erreur originale." }
+  }
+
+  generation {
+    required = [
+      "SagaOrchestrator",
+      "SagaStep records or types per spec flow",
+      "compensation for each step with side effects",
+      "TransactionBoundary when spec marks transactional steps"
+    ]
+    optional = ["TransactionalMarker on boundary methods", "Flux support if spec extends beyond Mono"]
+    forbidden = [
+      "Step avec effet externe sans compensation documentée dans spec",
+      "Orchestrateur singleton partageant état entre requêtes concurrentes",
+      "Compensation qui lance une nouvelle saga non bornée",
+      "Ignorer échec de compensation (silent swallow) sans spec",
+      "Saga pour un seul appel DB local — préférer TX locale simple (KISS)"
+    ]
+  }
+
+  tests {
+    assertion "happy-path" {
+      verifies = "Tous les steps exécutés ; aucune compensation appelée."
+    }
+    assertion "rollback" {
+      verifies = "Échec au step K invoque compensations K-1..0 dans l'ordre."
+    }
+    assertion "transactional-step" {
+      verifies = "Step flaggé transactional rollback DB si action échoue avant commit."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "Command", "TransactionalOutbox", "Validator", "Cronjob"]
+  }
+
+  examples {
+    java {
+      """
+// usecase when: reserve stock → pay → persist · usecase payment-declined → compensate stock
+
+package <basePackage>.domain.workflow.saga.checkout;
+
+@Component
+@Scope("prototype")
+@RequiredArgsConstructor
+public class CheckoutSagaOrchestrator {
+  private final MultiflexSagaExecutor sagaExecutor;
+  private final InventoryApi inventory;
+  private final PaymentGatewaySpi payment;
+  private final OrderRepositorySpi orders;
+
+  public Mono<Void> checkout(CheckoutInput input) {
+    return sagaExecutor.newExecutor(input)
+        .addStep(reserveStockStep())
+        .addStep(chargePaymentStep())
+        .addStep(persistOrderStep())
+        .execute();
+  }
+
+  private MultiflexSagaStep<CheckoutInput, StockReservation> reserveStockStep() {
+    return new MultiflexSagaStep<>(
+        in -> inventory.reserveStock(in.cartId()),
+        reservation -> inventory.releaseStock(reservation),
+        true,
+        true);
+  }
+
+  private MultiflexSagaStep<StockReservation, PaymentAuthorization> chargePaymentStep() {
+    return new MultiflexSagaStep<>(
+        reservation -> payment.authorize(reservation.toPaymentCommand()),
+        auth -> payment.voidAuthorization(auth),
+        false,
+        true);
+  }
+}
+      """
+    }
+  }
+}

@@ -1,0 +1,113 @@
+strategy_skeleton 1.0
+
+strategy "GraphQLStream" {
+  id = "graphql-stream"
+  family = "api"
+  implementation_language = "project"
+
+  intent {
+    """
+    Exposer des mises à jour incrémentales ou des subscriptions GraphQL vers
+    les clients, avec un flux async aligné sur le runtime réactif du projet
+    et sans bloquer les threads du serveur.
+    """
+  }
+
+  applicability {
+    signals = ["graphql", "subscription", "stream", "reactive", "live updates", "sse-like"]
+  }
+
+  participants {
+    participant "GraphSchema" {
+      kind = "contract"
+      responsibility = "Types Query/Mutation/Subscription ; champs stream documentés dans la spec."
+    }
+    participant "SubscriptionResolver" {
+      kind = "primary_adapter"
+      responsibility = "Mappe arguments subscription → source de flux ; authz au subscribe."
+    }
+    participant "StreamSource" {
+      kind = "port_or_publisher"
+      responsibility = "Publisher d'événements (domain, broker, polling interne) — async non bloquant."
+    }
+    participant "StreamMapper" {
+      kind = "mapping"
+      responsibility = "Domain/event → payload GraphQL ; pas d'entité domaine exposée telle quelle."
+    }
+    participant "BackpressurePolicy" {
+      kind = "policy"
+      responsibility = "Buffer, drop, latest-only ou demand — selon stack et spec."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Consomme le flux subscription jusqu'à unsubscribe ou fin."
+    }
+  }
+
+  relations {
+    relation "Client" -> "SubscriptionResolver" { type = "subscribes" }
+    relation "SubscriptionResolver" -> "StreamSource" { type = "binds" }
+    relation "StreamSource" -> "StreamMapper" { type = "emits_through" }
+    relation "StreamMapper" -> "GraphSchema" { type = "conforms_to" }
+    relation "BackpressurePolicy" -> "StreamSource" { type = "governs" }
+  }
+
+  algorithm {
+    step 1 { action = "Client ouvre subscription avec filtres/variables spec." }
+    step 2 { action = "SubscriptionResolver vérifie droits et attache StreamSource." }
+    step 3 { action = "Événements mappés et poussés avec BackpressurePolicy." }
+    step 4 { action = "Unsubscribe ou erreur terminal ferme le flux proprement." }
+  }
+
+  generation {
+    required = ["GraphSchema subscription fields", "SubscriptionResolver", "StreamSource", "StreamMapper"]
+    optional = ["filter arguments", "initial snapshot + stream", "heartbeat/ping"]
+    forbidden = [
+      "Bloquer un thread par événement en attente sync illimitée",
+      "Exposer types persistence ou entités domaine brutes dans le schéma",
+      "Subscription sans politique d'erreur (complete vs error payload)",
+      "Ignorer authz différente entre query et subscription",
+      "Flux sans limite mémoire quand BackpressurePolicy est requis par spec"
+    ]
+  }
+
+  tests {
+    assertion "subscribe-unsubscribe" {
+      verifies = "Cycle subscribe → événements → unsubscribe sans fuite de ressources."
+    }
+    assertion "payload-shape" {
+      verifies = "Payload stream respecte GraphSchema pour fixture spec."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "Populator/Converter", "Observer", "Iterator", "Adapter"]
+  }
+
+  examples {
+    java {
+      """
+// SubscriptionResolver + StreamSource · OrderUpdatePayload (DTO GraphQL, pas entité JPA)
+
+package <basePackage>.infrastructure.primary.graphql.order;
+
+@Controller
+@RequiredArgsConstructor
+public class OrderSubscriptionController {
+  private final OrderUpdateStreamSource streamSource;
+  private final OrderUpdateGraphMapper mapper;
+
+  @SubscriptionMapping("orderStatusUpdates")
+  public Flux<OrderStatusUpdatePayload> orderStatusUpdates(
+      @Argument UUID customerId,
+      Authentication authentication) {
+    authorization.verifyCustomer(authentication, customerId);
+    return streamSource.streamForCustomer(customerId)
+        .onBackpressureLatest()
+        .map(mapper::toPayload);
+  }
+}
+      """
+    }
+  }
+}

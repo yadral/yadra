@@ -1,0 +1,59 @@
+ksl 1.0
+
+project "order-service" {
+  kind = "service"
+  parent = "yadral-platform"
+  version = "1.0.0"
+
+  meta {
+    name = "Order Service"
+    description = "Service métier de passage de commande, panier et outbox d'événements"
+    labels = ["orders", "checkout", "backend"]
+  }
+
+  repo {
+    path = "services/order-service"
+  }
+
+  stack {
+    runtime = "kotlin"
+    framework = "spring-boot-3"
+    data = ["postgres"]
+  }
+
+  dependencies {
+    parent_build = "root-parent-pom"
+    libs = [
+      "domain-common",
+      "testing-fixtures"
+    ]
+  }
+
+  // Domain modules hosted by this service (natural layout: modules/<name>/)
+  modules = ["checkout", "cart"]
+
+  docs {
+    swagger = "/swagger-ui.html"
+    redoc = "/redoc"
+    path = "docs/api"
+  }
+
+  e2e {
+    framework = "rest-assured"
+    path = "tests/e2e"
+  }
+
+  communications {
+    service "payment-gateway" {
+      protocol = "rest"
+      client = "feign"
+      in_config = true
+    }
+
+    service "inventory-service" {
+      protocol = "grpc"
+      client = "stub"
+      in_config = true
+    }
+  }
+}

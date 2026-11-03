@@ -1,0 +1,175 @@
+ksl 1.0
+
+spec "guest-checkout" {
+  module = "checkout"
+  related_specs = ["order-checkout.spec.ksl"]
+
+  meta {
+    name = "Guest Checkout"
+    target_service = "order-service"
+    version = "1.0"
+    labels = ["checkout", "guest"]
+  }
+
+  openapi {
+    ref = "docs/openapi/order-service-v1.yaml"
+    action = "update"
+    version = "1.2.1"
+    breaking_changes = false
+    description = """
+    Add guest checkout routes and guest contact fields on the order aggregate.
+    Reuse authenticated checkout payment and Outbox semantics without user account linkage.
+    """
+  }
+
+  intention {
+    """
+    Allow an unauthenticated visitor to complete checkout with an email address,
+    without creating an account, while still producing a PAID order and receipt.
+    """
+  }
+
+  scope {
+    included = [
+      "Checkout with guest email and shipping address",
+      "Reuse of the same payment and Outbox path as authenticated checkout",
+      "Receipt delivery to guest email via existing notification pipeline"
+    ]
+    excluded = [
+      "Account registration during checkout",
+      "Loyalty points and saved payment methods",
+      "Separate fraud rules beyond order-checkout baseline"
+    ]
+  }
+
+  flows {
+    flow "guest-checkout-nominal" {
+      description = "Guest email capture, cart load, payment authorization, order and receipt without account"
+      ref = "docs/diagrams/guest-checkout-flow.png"
+    }
+  }
+
+  integrations {
+    api "payment-gateway" {
+      type = "internal"
+      endpoint = "POST /api/v1/payments/authorize"
+      auth = "jwt"
+      in_config = true
+    }
+  }
+
+  messaging {
+    kafka {
+      topic = "orders.order-paid.v1"
+      role = "producer"
+      in_config = true
+      description = """
+      Same OrderPaidEvent contract as order-checkout; guest orders include guest_email in payload metadata.
+      """
+    }
+  }
+
+  data {
+    postgres {
+      schema = "orders"
+      database = "order_service"
+      in_config = true
+      description = """
+      Nullable user_id with required guest_email on order for guest checkout path.
+      Migrations extend existing order table; Outbox unchanged.
+      """
+    }
+
+    s3 {
+      bucket = "yadral-demo-receipts"
+      in_config = true
+      description = "Guest receipts stored with same encryption and retention as authenticated checkout."
+    }
+  }
+
+  usecases {
+    usecase "guest-nominal" {
+      description = "Guest completes checkout with email and valid card"
+      given = "Visitor with a non-empty cart and no account"
+      when = [
+        "1. Visitor submits checkout with email and payment details",
+        "2. System loads cart from cart module and validates via Validator",
+        "3. System authorizes payment with PaymentGateway",
+        "4. Order is persisted as PAID with guest_email and Outbox event",
+        "5. Receipt is stored in S3 and confirmation is sent to guest email"
+      ]
+      then = [
+        "Order exists with PAID status and guest email as contact",
+        "No user account is created",
+        "OrderPaid event is in Outbox within the same transaction"
+      ]
+    }
+  }
+
+  outputs {
+    kinds = ["ksl", "code", "data", "tests", "docs", "e2e"]
+
+    phase {
+      execute = ["code", "data", "tests"]
+      gate = ["docs", "e2e"]
+    }
+
+    docs {
+      title = "Guest Checkout API"
+      swagger = "/docs/swagger-ui"
+      redoc = "/docs/redoc"
+      confluence = "https://docs.yadral.com/display/ARCH/Guest+Checkout"
+      update_jira = true
+    }
+
+    e2e {
+      scenarios = [
+        "Guest checkout with email and mocked payment gateway",
+        "Guest checkout rejects when cart is empty"
+      ]
+      mock_externals = true
+    }
+  }
+
+  strategies {
+    strategy "Hexagonal" {
+      role = "architecture"
+      description = """
+      Guest checkout reuses checkout application services; email capture and session
+      binding live in adapters without a full customer account aggregate.
+      """
+    }
+    strategy "Validator" {
+      role = "pattern"
+      description = """
+      Enforce non-empty cart, valid guest email, and payment preconditions before
+      order creation for anonymous sessions.
+      """
+    }
+    strategy "Outbox" {
+      role = "pattern"
+      description = """
+      Same outbox relay as registered checkout so guest orders trigger fulfillment
+      events reliably after DB commit.
+      """
+    }
+    strategy "FluentCaseTest" {
+      role = "testing"
+      description = """
+      Guest e2e scenarios (email + mocked payment, empty cart rejection) as FluentCaseTest
+      with no authenticated user fixture.
+      """
+    }
+  }
+
+  budget {
+    max_repair_loops = 4
+    max_iterations = 6
+  }
+
+  references {
+    story = "STORY-905: Guest checkout without account"
+    jira = "ORD-201"
+    architecture_doc = "docs/architecture/adr-009-hexagonal-outbox.md"
+  }
+}

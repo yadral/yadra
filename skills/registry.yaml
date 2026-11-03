@@ -1,0 +1,35 @@
+# Registre SKILLS — référence yadral (copier / adapter dans le projet cible)
+# Strategies (noms KSL) : yadra/strategies/catalog.yaml — déduction en T1 · A · COMPRENDRE
+version: 1
+
+skills:
+  formalize:
+    timeline: T1
+    parts:
+      comprendre:
+        path: formalize/partie-a-comprendre/SKILL.md
+        phase: A
+      produire:
+        path: formalize/partie-b-produire/SKILL.md
+        phase: B
+      livrer:
+        path: formalize/partie-c-livrer/SKILL.md
+        phase: C
+  execute:
+    timeline: T2
+    parts:
+      comprendre:
+        path: execute/partie-a-comprendre/SKILL.md
+        phase: A
+      produire:
+        path: execute/partie-b-produire/SKILL.md
+        phase: B
+      livrer:
+        path: execute/partie-c-livrer/SKILL.md
+        phase: C
+  strategies:
+    timeline: T2
+    parts:
+      reference:
+        path: strategies/catalog/SKILL.md
+        phase: reference

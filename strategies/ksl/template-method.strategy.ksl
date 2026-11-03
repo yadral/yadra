@@ -1,0 +1,105 @@
+strategy_skeleton 1.0
+
+strategy "Template Method" {
+  id = "template-method"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Définir le squelette d'un algorithme dans une classe de base et laisser
+    les sous-classes surcharger des étapes sans changer la structure du flux.
+    """
+  }
+
+  applicability {
+    signals = ["fixed workflow", "hook methods", "skeleton algorithm", "variant steps"]
+  }
+
+  participants {
+    participant "AbstractClass" {
+      kind = "template_owner"
+      responsibility = "templateMethod() final ou documenté ; appelle hooks."
+    }
+    participant "ConcreteClass" {
+      kind = "specialization"
+      multiplicity = "one_or_more"
+      responsibility = "Implémente les steps abstraits ou optionnels."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Appelle templateMethod via AbstractClass."
+    }
+  }
+
+  relations {
+    relation "ConcreteClass" -> "AbstractClass" { type = "extends" }
+    relation "Client" -> "AbstractClass" { type = "uses" }
+  }
+
+  algorithm {
+    step 1 { action = "AbstractClass.templateMethod démarre le flux fixe." }
+    step 2 { action = "Appels stepA(), hookB(), stepC() dans ordre invariant." }
+    step 3 { action = "ConcreteClass fournit les implémentations variables." }
+  }
+
+  generation {
+    required = ["AbstractClass.templateMethod", "ConcreteClass", "abstract or hook steps"]
+    optional = ["default hook empty"]
+    forbidden = [
+      "ConcreteClass qui override templateMethod pour casser l'ordre sans spec",
+      "Dupliquer le flux complet dans chaque ConcreteClass",
+      "Hooks avec effets de bord cachés non documentés"
+    ]
+  }
+
+  tests {
+    assertion "skeleton" {
+      verifies = "L'ordre des étapes communes est identique pour toutes les variantes."
+    }
+    assertion "hooks" {
+      verifies = "Chaque ConcreteClass personnalise uniquement les steps prévus."
+    }
+  }
+
+  composition {
+    compatible = ["Factory Method", "Strategy", "Hexagonal"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.converter.receipt;
+
+public abstract class CheckoutReceiptGenerator {
+  public final byte[] generate(Order order) {
+    ReceiptDraft draft = loadDraft(order);
+    enrichDraft(draft, order);
+    return render(draft);
+  }
+
+  protected abstract ReceiptDraft loadDraft(Order order);
+
+  protected void enrichDraft(ReceiptDraft draft, Order order) {
+    draft.setCustomerEmail(order.getCustomerEmail());
+  }
+
+  protected abstract byte[] render(ReceiptDraft draft);
+}
+
+@Component
+public class JsonCheckoutReceiptGenerator extends CheckoutReceiptGenerator {
+  @Override
+  protected ReceiptDraft loadDraft(Order order) {
+    return ReceiptDraft.from(order);
+  }
+
+  @Override
+  protected byte[] render(ReceiptDraft draft) {
+    return jsonMapper.writeValueAsBytes(draft);
+  }
+}
+      """
+    }
+  }
+}

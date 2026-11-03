@@ -1,0 +1,12 @@
+{
+  "name": "@yadral/yadra-cli",
+  "version": "0.1.0",
+  "description": "Yadra CLI — validate and execute KSL specifications",
+  "type": "module",
+  "bin": {
+    "yadra": "./bin/yadra.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

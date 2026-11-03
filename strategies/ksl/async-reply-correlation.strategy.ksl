@@ -1,0 +1,111 @@
+strategy_skeleton 1.0
+
+strategy "AsyncRequestReply-Correlation" {
+  id = "async-reply-correlation"
+  family = "async"
+  implementation_language = "project"
+
+  intent {
+    """
+    Accepter une requête longue de façon asynchrone (ex. HTTP 202) et permettre
+    au client de récupérer le résultat via un identifiant de corrélation stable.
+    """
+  }
+
+  applicability {
+    signals = ["async", "correlation", "202", "accepted", "request-id", "callback optional"]
+  }
+
+  participants {
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Envoie la requête ; conserve correlationId ; récupère le résultat (poll ou callback)."
+    }
+    participant "AsyncIngress" {
+      kind = "primary_adapter"
+      responsibility = "Valide, crée correlationId, persiste état PENDING, répond 202 + location/correlation."
+    }
+    participant "CorrelationStore" {
+      kind = "port"
+      responsibility = "Persiste correlationId, statut, payload résultat ou erreur, horodatage."
+    }
+    participant "AsyncWorker" {
+      kind = "processor"
+      responsibility = "Exécute le traitement ; met à jour CorrelationStore (RUNNING → DONE/FAILED)."
+    }
+    participant "ResultRetrieval" {
+      kind = "primary_adapter"
+      optional = true
+      responsibility = "GET par correlationId ou notification callback documentée dans la spec."
+    }
+  }
+
+  relations {
+    relation "Client" -> "AsyncIngress" { type = "submits" }
+    relation "AsyncIngress" -> "CorrelationStore" { type = "creates_pending" }
+    relation "AsyncWorker" -> "CorrelationStore" { type = "updates" }
+    relation "Client" -> "ResultRetrieval" { type = "polls_or_waits" }
+    relation "ResultRetrieval" -> "CorrelationStore" { type = "reads" }
+  }
+
+  algorithm {
+    step 1 { action = "AsyncIngress valide et alloue correlationId unique." }
+    step 2 { action = "Réponse immédiate 202 avec correlationId et politique de récupération." }
+    step 3 { action = "AsyncWorker traite ; CorrelationStore reflète progression et résultat." }
+    step 4 { action = "Client récupère via ResultRetrieval ou callback si spec le prévoit." }
+  }
+
+  generation {
+    required = ["AsyncIngress", "CorrelationStore", "AsyncWorker", "correlationId contract"]
+    optional = ["ResultRetrieval API", "callback URL in request", "TTL on pending jobs"]
+    forbidden = [
+      "Bloquer le thread HTTP jusqu'à la fin du traitement sans spec sync",
+      "Réutiliser correlationId entre requêtes distinctes",
+      "Résultat sans statut terminal explicite (DONE/FAILED/CANCELLED)",
+      "CorrelationStore sans idempotence sur soumission dupliquée si spec l'exige"
+    ]
+  }
+
+  tests {
+    assertion "acceptance" {
+      verifies = "Soumission valide retourne 202 et correlationId ; worker démarre."
+    }
+    assertion "terminal-state" {
+      verifies = "Après traitement, store et API de récupération exposent le même état terminal."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "Command", "AsyncRequest-PollingStatus", "AsyncRequest-WebhookCallback"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.infrastructure.primary.rest.checkout;
+
+@RestController
+@RequiredArgsConstructor
+public class AsyncCheckoutController {
+  private final CorrelationStore correlationStore;
+  private final AsyncCheckoutWorker worker;
+
+  @PostMapping("/checkout/async")
+  public ResponseEntity<AcceptedCheckoutJob> submit(@RequestBody CheckoutRequest body) {
+    String correlationId = correlationStore.createPending(body);
+    worker.processAsync(correlationId);
+    return ResponseEntity.accepted()
+        .header("X-Correlation-Id", correlationId)
+        .body(new AcceptedCheckoutJob(correlationId, "/checkout/jobs/" + correlationId));
+  }
+
+  @GetMapping("/checkout/jobs/{correlationId}")
+  public CheckoutJobStatus status(@PathVariable String correlationId) {
+    return correlationStore.find(correlationId)
+        .orElseThrow(() -> new NotFoundException(correlationId));
+  }
+}
+      """
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@yadral/yadra",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "0.1.9",
+  "description": "Yadra CLI — T1 formalize/validate/seal, T2 plan/execute/gate/strategies, project",
+  "type": "module",
+  "bin": {
+    "yadra": "./src/main.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "src",
+    "vendor",
+    "scripts"
+  ],
+  "scripts": {
+    "prepare": "node scripts/sync-vendor.mjs",
+    "prepack": "YADRA_VENDOR_STRICT=1 node scripts/sync-vendor.mjs",
+    "pack:release": "npm pack",
+    "pack:dry-run": "YADRA_VENDOR_STRICT=1 node scripts/sync-vendor.mjs && npm pack --dry-run",
+    "release:pack": "npm test && npm run verify:vendor && npm run pack:release",
+    "release:github": "node scripts/gh-release.mjs",
+    "release:smoke": "bash scripts/smoke-install-from-tgz.sh",
+    "test": "node scripts/sync-vendor.mjs && node --test test/*.test.mjs",
+    "verify:vendor": "YADRA_VENDOR_STRICT=1 node scripts/sync-vendor.mjs"
+  },
+  "private": true
+}

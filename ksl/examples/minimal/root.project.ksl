@@ -1,0 +1,27 @@
+ksl 1.0
+
+project "yadral-platform" {
+  kind = "root"
+  version = "1.0.0"
+
+  meta {
+    name = "Yadral demo platform"
+    description = "Racine du monorepo démo — conventions, dépôts et stack par défaut"
+    labels = ["ecommerce", "core", "monorepo"]
+  }
+
+  repo {
+    path = "../demo-apps"
+    vcs = "git"
+    remote = "https://github.com/yadral/demo-apps.git"
+    branch = "main"
+  }
+
+  stack {
+    build = "gradle"
+    runtime = "kotlin"
+    framework = "spring-boot-3"
+    data = ["postgres", "bigquery"]
+    infra = ["opentofu", "docker"]
+  }
+}

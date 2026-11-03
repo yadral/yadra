@@ -1,0 +1,294 @@
+(* KSL v1.0 — Kom Specification Language
+   High-level declarative DSL for Yadra (Spec-to-Code Binder).
+   Files:
+     - *.project.ksl : root or decentralized component (service, lib)
+     - *.module.ksl  : domain module that owns one or more *.spec.ksl files
+     - *.spec.ksl    : functional vertical slice specification
+   Layout:
+     services/<service>/<service>.project.ksl
+     services/<service>/modules/<domain>/<domain>.module.ksl
+     services/<service>/modules/<domain>/*.spec.ksl
+   Normative specification: docs/ksl-language-spec.md
+*)
+
+(* ─── Lexicon ─────────────────────────────────────────────────────────────── *)
+
+letter          = "A"…"Z" | "a"…"z" ;
+digit           = "0"…"9" ;
+ident_start     = letter | "_" ;
+ident_char      = letter | digit | "_" | "-" ;
+identifier      = ident_start , { ident_char } ;
+
+string_lit      = '"' , { string_char } , '"' ;
+string_char     = ? any character except quote and unescaped newline ?
+                | '\\' , ( '"' | '\\' | 'n' | 't' ) ;
+
+raw_multiline   = '"""' , { ? any character except triple quote ? } , '"""' ;
+
+text_value      = string_lit | raw_multiline ;
+bool_lit        = "true" | "false" ;
+int_lit         = digit , { digit } ;
+
+(* ─── Root File ───────────────────────────────────────────────────────────── *)
+
+isl_file        = version_header , { top_declaration } ;
+
+version_header  = "ksl" , version_number , [ ";" ] ;
+version_number  = digit , { digit } , "." , digit , { digit } ;
+
+top_declaration = project_decl
+                | module_decl
+                | spec_decl
+                ;
+
+(* ─── 1. PROJECT (*.project.ksl : root, service, lib) ─────────────────────── *)
+
+project_decl    = "project" , text_value , "{" , { project_member } , "}" ;
+
+project_member  = ( "kind" | "version" | "parent" ) , "=" , text_value , [ ";" ]
+                | meta_block
+                | repo_block
+                | stack_block
+                | dependencies_block
+                | communications_block
+                | project_docs_block
+                | project_e2e_block
+                | modules_list
+                ;
+
+repo_block      = "repo" , "{" , { repo_member } , "}" ;
+repo_member     = identifier , "=" , text_value , [ ";" ] ;
+
+stack_block     = "stack" , "{" , { stack_member } , "}" ;
+stack_member    = stack_category , "=" , ( text_value | string_list ) , [ ";" ] ;
+stack_category  = "build" | "runtime" | "framework" | "data" | "infra" | identifier ;
+
+dependencies_block = "dependencies" , "{" , { dep_member } , "}" ;
+dep_member      = ( "libs" | "test_fixtures" | "plugins" ) , "=" , string_list , [ ";" ]
+                | ( "parent_build" | "parent_pom" | "bom" ) , "=" , text_value , [ ";" ]
+                | identifier , "=" , ( text_value | string_list ) , [ ";" ]
+                ;
+
+communications_block = "communications" , "{" , { comm_target } , "}" ;
+comm_target     = "service" , text_value , "{" , { comm_attr } , "}" ;
+comm_attr       = "protocol" , "=" , text_value , [ ";" ]
+                | "client" , "=" , text_value , [ ";" ]
+                | "in_config" , "=" , bool_lit , [ ";" ]
+                | "config_key" , "=" , text_value , [ ";" ]
+                | identifier , "=" , ( text_value | bool_lit ) , [ ";" ]
+                ;
+
+(* Documentation configuration at service level: default paths / endpoints *)
+project_docs_block = "docs" , "{" , { project_doc_member } , "}" ;
+project_doc_member = "swagger" , "=" , text_value , [ ";" ]   (* default endpoint e.g. "/swagger-ui.html" *)
+                   | "redoc" , "=" , text_value , [ ";" ]     (* default endpoint e.g. "/redoc" *)
+                   | "confluence_space" , "=" , text_value , [ ";" ]
+                   | "path" , "=" , text_value , [ ";" ]      (* static export folder e.g. "docs/api" *)
+                   | identifier , "=" , ( text_value | string_list ) , [ ";" ]
+                   ;
+
+(* E2E test configuration at service level *)
+project_e2e_block  = "e2e" , "{" , { project_e2e_member } , "}" ;
+project_e2e_member = "framework" , "=" , text_value , [ ";" ] (* "rest-assured", "playwright", "cucumber" *)
+                   | "path" , "=" , text_value , [ ";" ]      (* test folder e.g. "tests/e2e" *)
+                   | identifier , "=" , text_value , [ ";" ]
+                   ;
+
+(* Optional catalogue of domain modules hosted by this service *)
+modules_list    = "modules" , "=" , string_list , [ ";" ]
+                | "modules" , "{" , { module_ref } , "}" ;
+module_ref      = "module" , text_value , [ "{" , { meta_member } , "}" ] , [ ";" ]
+                ;
+
+(* ─── 2. MODULE (*.module.ksl : domain module that owns specs) ─────────────── *)
+
+(* Physical layout is the natural attachment:
+     services/<service>/modules/<domain>/<domain>.module.ksl
+     services/<service>/modules/<domain>/*.spec.ksl
+   Each spec MUST also declare module = "<domain>" (explicit attachment).
+*)
+
+module_decl     = "module" , text_value , "{" , { module_member } , "}" ;
+
+module_member   = "service" , "=" , text_value , [ ";" ]
+                | meta_block
+                | "specs" , "=" , string_list , [ ";" ]
+                | "depends_on_modules" , "=" , string_list , [ ";" ]
+                | vocabulary_block
+                | identifier , "=" , ( text_value | string_list ) , [ ";" ]
+                ;
+
+vocabulary_block = "vocabulary" , "{" , { vocab_member } , "}" ;
+vocab_member    = "term" , text_value , "=" , text_value , [ ";" ]
+                | identifier , "=" , text_value , [ ";" ]
+                ;
+
+(* ─── 3. SPEC (*.spec.ksl : feature specification) ────────────────────────── *)
+
+spec_decl       = "spec" , text_value , "{" , { spec_member } , "}" ;
+
+spec_member     = "module" , "=" , text_value , [ ";" ]
+                | "related_specs" , "=" , string_list , [ ";" ]
+                | meta_block
+                | openapi_block
+                | intention_block
+                | scope_block
+                | flows_block
+                | integrations_block
+                | messaging_block
+                | storage_block
+                | data_block
+                | usecases_block
+                | outputs_block
+                | spec_e2e_block
+                | spec_docs_block
+                | strategies_block
+                | budget_block
+                | references_block
+                ;
+
+intention_block = ( "intention" | "intent" ) , "{" , ( text_value | prose_stream ) , "}" ;
+
+scope_block     = "scope" , "{" , { scope_member } , "}" ;
+scope_member    = "included" , "=" , ( string_list | text_value ) , [ ";" ]
+                | "excluded" , "=" , ( string_list | text_value ) , [ ";" ]
+                | identifier , "=" , ( string_list | text_value ) , [ ";" ]
+                ;
+
+(* OpenAPI Contract Lifecycle *)
+openapi_block   = ( "openapi" | "contract" ) , [ text_value ] , "{" , { openapi_member } , "}" ;
+openapi_member  = ( "ref" | "path" | "url" ) , "=" , text_value , [ ";" ]
+                | "action" , "=" , text_value , [ ";" ]         (* "create", "update", "delete", "deprecate" *)
+                | "version" , "=" , text_value , [ ";" ]
+                | "breaking_changes" , "=" , bool_lit , [ ";" ]
+                | ( "description" | "notes" ) , "=" , text_value , [ ";" ]
+                | identifier , "=" , ( text_value | bool_lit | string_list ) , [ ";" ]
+                ;
+
+(* Visual Flows: local image, remote URL, web page with description *)
+flows_block     = ( "flows" | "flow" ) , "{" , { flow_decl } , "}" ;
+flow_decl       = "flow" , [ text_value ] , "{" , { flow_member } , "}"
+                | "flow" , "=" , text_value , [ ";" ]
+                ;
+flow_member     = "description" , "=" , text_value , [ ";" ]
+                | ( "ref" | "image" | "url" | "path" ) , "=" , text_value , [ ";" ]
+                | identifier , "=" , text_value , [ ";" ]
+                ;
+
+(* API Integrations: internal or external, with auth and doc *)
+integrations_block = "integrations" , "{" , { api_integration } , "}" ;
+api_integration = "api" , text_value , "{" , { api_attr } , "}" ;
+api_attr        = "type" , "=" , text_value , [ ";" ]          (* "internal" | "external" *)
+                | "service" , "=" , text_value , [ ";" ]
+                | "endpoint" , "=" , text_value , [ ";" ]
+                | "auth" , "=" , text_value , [ ";" ]          (* "apikey", "oauth2", "jwt", "basic", "none" *)
+                | "doc" , "=" , text_value , [ ";" ]           (* documentation link for external APIs *)
+                | "in_config" , "=" , bool_lit , [ ";" ]
+                | identifier , "=" , ( text_value | bool_lit ) , [ ";" ]
+                ;
+
+(* Event Messaging: Kafka, RabbitMQ, SQS with free-text descriptions *)
+messaging_block = "messaging" , "{" , { messaging_service } , "}" ;
+messaging_service = ( "kafka" | "rabbit" | "sqs" | identifier ) , "{" , { msg_attr } , "}" ;
+msg_attr        = ( "topic" | "exchange" | "queue" ) , "=" , text_value , [ ";" ]
+                | "role" , "=" , text_value , [ ";" ]          (* "producer", "consumer", "both" *)
+                | "description" , "=" , text_value , [ ";" ]   (* Free text: consumers count, retry, DLQ... *)
+                | "in_config" , "=" , bool_lit , [ ";" ]
+                | identifier , "=" , ( text_value | bool_lit ) , [ ";" ]
+                ;
+
+(* Object Storage *)
+storage_block   = "storage" , "{" , { storage_target } , "}" ;
+storage_target  = ( "s3" | "gcs" | "blob" | identifier ) , "{" , { storage_attr } , "}" ;
+storage_attr    = "bucket" , "=" , text_value , [ ";" ]
+                | "description" , "=" , text_value , [ ";" ]
+                | "in_config" , "=" , bool_lit , [ ";" ]
+                | identifier , "=" , ( text_value | bool_lit ) , [ ";" ]
+                ;
+
+(* Data & persistence targets: relational DB, warehouse, cache, object store *)
+data_block      = "data" , "{" , { data_target } , "}" ;
+data_target     = ( "postgres" | "mysql" | "mariadb" | "bigquery" | "snowflake" | "redis"
+                  | "s3" | "gcs" | "blob" | identifier ) , "{" , { data_attr } , "}" ;
+data_attr       = "schema" , "=" , text_value , [ ";" ]
+                | "database" , "=" , text_value , [ ";" ]
+                | "dataset" , "=" , text_value , [ ";" ]
+                | "project" , "=" , text_value , [ ";" ]
+                | "bucket" , "=" , text_value , [ ";" ]
+                | "description" , "=" , text_value , [ ";" ]
+                | "in_config" , "=" , bool_lit , [ ";" ]
+                | identifier , "=" , ( text_value | bool_lit ) , [ ";" ]
+                ;
+
+(* Delivery manifest: artefact kinds + optional nested docs / e2e *)
+outputs_block   = "outputs" , "{" , { outputs_member } , "}" ;
+outputs_member  = ( "kinds" | "targets" ) , "=" , string_list , [ ";" ]
+                | outputs_phase_block
+                | spec_e2e_block
+                | spec_docs_block
+                ;
+
+outputs_phase_block = "phase" , "{" , { outputs_phase_member } , "}" ;
+outputs_phase_member = "execute" , "=" , string_list , [ ";" ]
+                     | "gate" , "=" , string_list , [ ";" ]
+                     ;
+
+(* Use cases *)
+usecases_block  = "usecases" , "{" , { usecase_decl } , "}" ;
+usecase_decl    = "usecase" , text_value , "{" , { usecase_member } , "}" ;
+usecase_member  = "description" , "=" , text_value , [ ";" ]
+                | ( "given" | "context" ) , "=" , text_value , [ ";" ]
+                | ( "when" | "scenario" ) , "=" , ( string_list | text_value ) , [ ";" ]
+                | ( "then" | "expected" ) , "=" , ( string_list | text_value ) , [ ";" ]
+                | identifier , "=" , ( text_value | string_list ) , [ ";" ]
+                ;
+
+(* E2E test generation: path is optional *)
+spec_e2e_block  = "e2e" , "{" , { spec_e2e_member } , "}" ;
+spec_e2e_member = "scenarios" , "=" , ( string_list | text_value ) , [ ";" ]
+                | "path" , "=" , text_value , [ ";" ]          (* optional target test directory *)
+                | "mock_externals" , "=" , bool_lit , [ ";" ]
+                | identifier , "=" , ( text_value | string_list | bool_lit ) , [ ";" ]
+                ;
+
+(* Documentation & Sync Targets: swagger path/URL, redoc path/URL, confluence URL, jira *)
+spec_docs_block = "docs" , "{" , { spec_docs_member } , "}" ;
+spec_docs_member = "swagger" , "=" , text_value , [ ";" ]      (* endpoint route "/swagger-ui" or static file path *)
+                 | "redoc" , "=" , text_value , [ ";" ]        (* endpoint route "/redoc" or static file path *)
+                 | "confluence" , "=" , text_value , [ ";" ]   (* target Confluence page URL to update *)
+                 | "update_jira" , "=" , bool_lit , [ ";" ]    (* update Jira ticket description from references *)
+                 | "path" , "=" , text_value , [ ";" ]         (* optional base docs export folder *)
+                 | "title" , "=" , text_value , [ ";" ]
+                 | identifier , "=" , ( text_value | string_list | bool_lit ) , [ ";" ]
+                 ;
+
+(* Design strategies: one or more named patterns / architecture / testing choices *)
+strategies_block  = "strategies" , "{" , { strategy_decl } , "}" ;
+strategy_decl     = "strategy" , text_value , "{" , { strategy_entry_member } , "}" ;
+strategy_entry_member = "description" , "=" , text_value , [ ";" ]
+                      | "role" , "=" , text_value , [ ";" ]   (* "architecture" | "pattern" | "testing" | … *)
+                      | identifier , "=" , ( text_value | string_list ) , [ ";" ]
+                      ;
+
+budget_block    = "budget" , "{" , { budget_member } , "}" ;
+budget_member   = identifier , "=" , ( text_value | int_lit ) , [ ";" ] ;
+
+(* ─── Shared Blocks ───────────────────────────────────────────────────────── *)
+
+meta_block      = "meta" , "{" , { meta_member } , "}" ;
+meta_member     = "name" , "=" , text_value , [ ";" ]
+                | "description" , "=" , text_value , [ ";" ]
+                | "labels" , "=" , string_list , [ ";" ]
+                | "target_service" , "=" , text_value , [ ";" ]
+                | "module" , "=" , text_value , [ ";" ]
+                | "version" , "=" , text_value , [ ";" ]
+                | identifier , "=" , ( text_value | string_list | int_lit ) , [ ";" ]
+                ;
+
+references_block = ( "references" | "ref" ) , "{" , { ref_member } , "}" ;
+ref_member      = identifier , "=" , text_value , [ ";" ] ;
+
+string_list     = "[" , [ list_element , { "," , list_element } , [ "," ] ] , "]" ;
+list_element    = text_value ;
+
+prose_stream    = { ? any text ? } ;

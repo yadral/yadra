@@ -1,0 +1,95 @@
+strategy_skeleton 1.0
+
+strategy "Prototype" {
+  id = "prototype"
+  family = "creational"
+  implementation_language = "project"
+
+  intent {
+    """
+    Créer de nouveaux objets en clonant un prototype, lorsque le type concret
+    ou le coût d'instanciation doit rester encapsulé.
+    """
+  }
+
+  applicability {
+    signals = ["clone", "copy", "preset template", "expensive construction"]
+  }
+
+  participants {
+    participant "Prototype" {
+      kind = "clone_contract"
+      responsibility = "Déclare clone() ou copy() vers un nouveau Product."
+    }
+    participant "ConcretePrototype" {
+      kind = "implementation"
+      multiplicity = "one_or_more"
+      responsibility = "Implémente le clonage profond ou sélectif documenté."
+    }
+    participant "PrototypeRegistry" {
+      kind = "catalog"
+      optional = true
+      responsibility = "Stocke des prototypes nommés pour duplication."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Demande un clone sans connaître la classe concrète."
+    }
+  }
+
+  relations {
+    relation "ConcretePrototype" -> "Prototype" { type = "implements" }
+    relation "Client" -> "Prototype" { type = "clones_from" }
+    relation "PrototypeRegistry" -> "Prototype" { type = "holds_optional" }
+  }
+
+  algorithm {
+    step 1 { action = "Sélectionner un prototype (registry ou instance)." }
+    step 2 { action = "Cloner en respectant la politique deep/shallow." }
+    step 3 { action = "Appliquer les surcharges locales au clone si nécessaire." }
+  }
+
+  generation {
+    required = ["Prototype", "ConcretePrototype", "clone semantics documented"]
+    optional = ["PrototypeRegistry"]
+    forbidden = [
+      "Clone par sérialisation implicite non documentée",
+      "Partager des références mutables sans copie quand deep clone requis",
+      "new ConcretePrototype() dispersé là où clone est requis"
+    ]
+  }
+
+  tests {
+    assertion "independence" {
+      verifies = "Modifier le clone ne modifie pas le prototype source."
+    }
+    assertion "contract" {
+      verifies = "clone() respecte les invariants du Product."
+    }
+  }
+
+  composition {
+    compatible = ["Factory Method", "Abstract Factory", "Memento"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.template;
+
+public record OrderReceiptTemplate(String subject, String bodyHtml) implements Prototype<OrderReceiptTemplate> {
+  @Override
+  public OrderReceiptTemplate clone() {
+    return new OrderReceiptTemplate(subject, bodyHtml);
+  }
+
+  public OrderReceiptTemplate withOrderId(OrderId orderId) {
+    return new OrderReceiptTemplate(
+        subject.replace("{orderId}", orderId.toString()),
+        bodyHtml.replace("{orderId}", orderId.toString()));
+  }
+}
+      """
+    }
+  }
+}

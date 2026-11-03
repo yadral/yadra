@@ -1,0 +1,23 @@
+ksl 1.0
+
+module "checkout" {
+  service = "order-service"
+
+  meta {
+    name = "Checkout Domain"
+    description = "Sous-domaine métier de finalisation de commande, autorisation de paiement et publication Outbox"
+  }
+
+  // Specs owned by this domain module (same directory)
+  specs = [
+    "order-checkout.spec.ksl",
+    "guest-checkout.spec.ksl"
+  ]
+
+  depends_on_modules = ["cart"]
+
+  vocabulary {
+    term "Order" = "Aggregate representing a contractual purchase commitment"
+    term "OutboxEvent" = "Domain event guaranteed for asynchronous delivery"
+  }
+}

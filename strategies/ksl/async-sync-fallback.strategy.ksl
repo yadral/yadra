@@ -1,0 +1,113 @@
+strategy_skeleton 1.0
+
+strategy "AsyncRequest-SyncFallback" {
+  id = "async-sync-fallback"
+  family = "async"
+  implementation_language = "project"
+
+  intent {
+    """
+    Tenter d'abord un chemin synchrone (réponse immédiate) et basculer vers
+    async (202 + correlation/job) si timeout, surcharge ou règle métier l'exige.
+    """
+  }
+
+  applicability {
+    signals = ["sync fallback", "timeout", "degrade async", "fast path", "slow path"]
+  }
+
+  participants {
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Appelle une API unifiée ; accepte 200 sync ou 202 async selon réponse."
+    }
+    participant "UnifiedFacade" {
+      kind = "primary_adapter"
+      responsibility = "Orchestre SyncPath puis AsyncEscalation selon politique."
+    }
+    participant "SyncHandler" {
+      kind = "processor"
+      responsibility = "Traitement inline bounded par timeout SLA sync."
+    }
+    participant "EscalationPolicy" {
+      kind = "domain_policy"
+      responsibility = "Décide bascule : timeout, erreur retryable, charge, taille payload."
+    }
+    participant "AsyncPath" {
+      kind = "composition"
+      responsibility = "Délègue à Correlation ou Polling ou MessageReply selon spec."
+    }
+  }
+
+  relations {
+    relation "Client" -> "UnifiedFacade" { type = "invokes" }
+    relation "UnifiedFacade" -> "SyncHandler" { type = "tries_first" }
+    relation "UnifiedFacade" -> "EscalationPolicy" { type = "evaluates" }
+    relation "UnifiedFacade" -> "AsyncPath" { type = "escalates_on" }
+  }
+
+  algorithm {
+    step 1 { action = "UnifiedFacade démarre SyncHandler avec deadline sync." }
+    step 2 { action = "Succès dans SLA → 200 + corps complet." }
+    step 3 { action = "Échec/timeout selon EscalationPolicy → AsyncPath (202 + id de suivi)." }
+    step 4 { action = "Client suit doc pour récupération async si 202." }
+  }
+
+  generation {
+    required = ["UnifiedFacade", "SyncHandler", "EscalationPolicy", "AsyncPath binding"]
+    optional = ["header Prefer: respond-sync", "503 vs 202 on overload"]
+    forbidden = [
+      "Double exécution non idempotente (sync + async) pour la même soumission",
+      "Bascule async sans identifiant de suivi",
+      "Timeout sync infini masquant la variante async",
+      "AsyncPath différent de celui documenté dans la strategy sans spec"
+    ]
+  }
+
+  tests {
+    assertion "fast-path" {
+      verifies = "Cas rapide reste sync sans créer de job async."
+    }
+    assertion "escalation" {
+      verifies = "Timeout simulé produit 202 et un seul traitement métier effectif."
+    }
+  }
+
+  composition {
+    compatible = [
+      "Hexagonal",
+      "Facade",
+      "AsyncRequestReply-Correlation",
+      "AsyncRequest-PollingStatus",
+      "AsyncRequest-MessageReply"
+    ]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.infrastructure.primary.rest.checkout;
+
+@RestController
+@RequiredArgsConstructor
+public class UnifiedCheckoutController {
+  private final SyncCheckoutHandler syncHandler;
+  private final AsyncCheckoutPath asyncPath;
+
+  @PostMapping("/checkout")
+  public ResponseEntity<?> checkout(@RequestBody CheckoutRequest request) {
+    try {
+      CheckoutResponse response = syncHandler
+          .handle(request)
+          .block(Duration.ofSeconds(2));
+      return ResponseEntity.ok(response);
+    } catch (TimeoutException ex) {
+      String jobId = asyncPath.submit(request);
+      return ResponseEntity.accepted().body(new AsyncCheckoutAccepted(jobId));
+    }
+  }
+}
+      """
+    }
+  }
+}

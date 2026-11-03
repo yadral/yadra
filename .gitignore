@@ -1,0 +1,9 @@
+.DS_Store
+.yadra/
+node_modules/
+cli/vendor/
+cli/yadral-yadra-*.tgz
+documentation/.next/
+documentation/out/
+documentation/node_modules/
+ksl/editor/ksl-vscode/*.vsix

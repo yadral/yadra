@@ -1,0 +1,90 @@
+strategy_skeleton 1.0
+
+strategy "Memento" {
+  id = "memento"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Capturer et externaliser l'état interne d'un objet sans violer
+    l'encapsulation, pour restauration ultérieure (undo, snapshot).
+    """
+  }
+
+  applicability {
+    signals = ["undo", "snapshot", "checkpoint", "restore state"]
+  }
+
+  participants {
+    participant "Originator" {
+      kind = "state_owner"
+      responsibility = "Crée Memento depuis son état ; restore(Memento)."
+    }
+    participant "Memento" {
+      kind = "snapshot"
+      responsibility = "Stocke l'état ; opaque pour Caretaker."
+    }
+    participant "Caretaker" {
+      kind = "history"
+      responsibility = "Stocke des Memento sans les inspecter."
+    }
+  }
+
+  relations {
+    relation "Originator" -> "Memento" { type = "creates_and_reads" }
+    relation "Caretaker" -> "Memento" { type = "stores_opaque" }
+    relation "Caretaker" -> "Originator" { type = "triggers_restore" }
+  }
+
+  generation {
+    required = ["Originator", "Memento", "Caretaker"]
+    optional = ["bounded stack", "immutable memento"]
+    forbidden = [
+      "Caretaker qui mute Memento",
+      "Memento public avec setters larges",
+      "Restore sans validation de version/schema"
+    ]
+  }
+
+  tests {
+    assertion "round-trip" {
+      verifies = "save puis restore reproduit l'état observable."
+    }
+    assertion "encapsulation" {
+      verifies = "Caretaker n'accède pas aux champs internes de Memento."
+    }
+  }
+
+  composition {
+    compatible = ["Command", "Prototype"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.model.cart;
+
+public final class CartMemento {
+  private final List<CartLineSnapshot> lines;
+  CartMemento(List<CartLineSnapshot> lines) {
+    this.lines = List.copyOf(lines);
+  }
+  List<CartLineSnapshot> lines() { return lines; }
+}
+
+public final class Cart {
+  private List<CartLine> lines = new ArrayList<>();
+
+  public CartMemento save() {
+    return new CartMemento(lines.stream().map(CartLineSnapshot::from).toList());
+  }
+
+  public void restore(CartMemento memento) {
+    this.lines = memento.lines().stream().map(CartLineSnapshot::toLine).toList();
+  }
+}
+      """
+    }
+  }
+}

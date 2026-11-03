@@ -1,0 +1,85 @@
+strategy_skeleton 1.0
+
+strategy "Flyweight" {
+  id = "flyweight"
+  family = "structural"
+  implementation_language = "project"
+
+  intent {
+    """
+    Partager l'état intrinsèque (immuable) entre de nombreuses instances fines
+    en externalisant l'état extrinsèque côté client.
+    """
+  }
+
+  applicability {
+    signals = ["many similar objects", "shared immutable state", "memory", "glyph cache"]
+  }
+
+  participants {
+    participant "Flyweight" {
+      kind = "shared_intrinsic"
+      responsibility = "État intrinsèque immuable ; opérations paramétrées par extrinsèque."
+    }
+    participant "FlyweightFactory" {
+      kind = "pool"
+      responsibility = "Retourne ou crée Flyweight pour une clé intrinsèque."
+    }
+    participant "ExtrinsicState" {
+      kind = "context"
+      responsibility = "Données variantes passées à chaque appel, non stockées dans Flyweight."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Maintient extrinsèque ; utilise factory pour intrinsèque."
+    }
+  }
+
+  relations {
+    relation "FlyweightFactory" -> "Flyweight" { type = "pools" }
+    relation "Client" -> "FlyweightFactory" { type = "uses" }
+    relation "Client" -> "ExtrinsicState" { type = "holds" }
+    relation "Flyweight" -> "ExtrinsicState" { type = "accepts_at_invoke" }
+  }
+
+  generation {
+    required = ["Flyweight", "FlyweightFactory", "intrinsic key"]
+    optional = ["cache eviction", "metrics"]
+    forbidden = [
+      "Stocker état extrinsèque mutable dans Flyweight",
+      "Créer un Flyweight par instance client sans pooling",
+      "Partager des objets mutables via le pool"
+    ]
+  }
+
+  tests {
+    assertion "sharing" {
+      verifies = "Même clé intrinsèque retourne la même instance Flyweight."
+    }
+    assertion "extrinsic" {
+      verifies = "Deux clients avec même intrinsèque et extrinsèque différent restent isolés."
+    }
+  }
+
+  composition {
+    compatible = ["Factory Method", "Composite"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.catalog;
+
+public final class ProductCatalogFlyweight {
+  private static final Map<ProductSku, ProductMetadata> CACHE = new ConcurrentHashMap<>();
+
+  public ProductMetadata metadataFor(ProductSku sku) {
+    return CACHE.computeIfAbsent(sku, ProductMetadata::loadSharedAttributes);
+  }
+}
+
+// CartLine holds sku + quantity ; metadata (label, tax category) partagé via flyweight
+      """
+    }
+  }
+}

@@ -1,0 +1,106 @@
+strategy_skeleton 1.0
+
+strategy "Chain of Responsibility" {
+  id = "chain-of-responsibility"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Chaîner des handlers jusqu'à ce qu'un traite la requête, sans coupler
+    l'émetteur à un handler concret.
+    """
+  }
+
+  applicability {
+    signals = ["pipeline", "handler chain", "middleware", "successor"]
+  }
+
+  participants {
+    participant "Handler" {
+      kind = "contract"
+      responsibility = "handle(request) ; setNext(Handler) ou équivalent."
+    }
+    participant "ConcreteHandler" {
+      kind = "implementation"
+      multiplicity = "one_or_more"
+      responsibility = "Traite ou transmet au successeur."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Envoie la requête à la tête de chaîne uniquement."
+    }
+  }
+
+  relations {
+    relation "ConcreteHandler" -> "Handler" { type = "implements" }
+    relation "Handler" -> "Handler" { type = "successor_optional" }
+    relation "Client" -> "Handler" { type = "submits_to_head" }
+  }
+
+  algorithm {
+    step 1 { action = "Handler examine si la requête est in-scope." }
+    step 2 { condition = "handled" action = "Retourner résultat ou stop." }
+    step 3 { condition = "not handled" action = "Transmettre au successeur." }
+    step 4 { condition = "no successor" action = "Politique d'échec documentée." }
+  }
+
+  generation {
+    required = ["Handler", "at least one ConcreteHandler", "chain wiring"]
+    optional = ["ordered chain builder", "short-circuit rule"]
+    forbidden = [
+      "Client appelle un ConcreteHandler intermédiaire directement",
+      "Boucle dans la chaîne",
+      "Handler qui avale silencieusement sans politique terminal"
+    ]
+  }
+
+  tests {
+    assertion "routing" {
+      verifies = "La requête est traitée par le premier handler compétent."
+    }
+    assertion "fallback" {
+      verifies = "Absence de handler produit l'échec ou défaut documenté."
+    }
+  }
+
+  composition {
+    compatible = ["Decorator", "Command", "Validator"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.infrastructure.primary.rest.security;
+
+public abstract class CheckoutAuthorizationHandler {
+  private CheckoutAuthorizationHandler next;
+
+  public CheckoutAuthorizationHandler linkNext(CheckoutAuthorizationHandler next) {
+    this.next = next;
+    return next;
+  }
+
+  public void authorize(CheckoutRequest request, AuthenticatedUser user) {
+    doAuthorize(request, user);
+    if (next != null) {
+      next.authorize(request, user);
+    }
+  }
+
+  protected abstract void doAuthorize(CheckoutRequest request, AuthenticatedUser user);
+}
+
+@Component
+public class CartOwnershipHandler extends CheckoutAuthorizationHandler {
+  @Override
+  protected void doAuthorize(CheckoutRequest request, AuthenticatedUser user) {
+    if (!user.ownsCart(request.getCartId())) {
+      throw new ForbiddenException("cart not owned by user");
+    }
+  }
+}
+      """
+    }
+  }
+}

@@ -1,0 +1,103 @@
+strategy_skeleton 1.0
+
+strategy "AsyncRequest-WebhookCallback" {
+  id = "async-webhook-callback"
+  family = "async"
+  implementation_language = "project"
+
+  intent {
+    """
+    Traiter une requête longue en arrière-plan et notifier le client en POSTant
+    le résultat (ou l'échec) sur une URL de callback fournie ou enregistrée.
+    """
+  }
+
+  applicability {
+    signals = ["webhook", "callback", "async", "notification", "signed payload"]
+  }
+
+  participants {
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Soumet la requête avec callbackUrl (ou référence enregistrée) ; expose endpoint récepteur."
+    }
+    participant "AsyncIngress" {
+      kind = "primary_adapter"
+      responsibility = "Valide callback, crée job/correlation, répond 202 ou équivalent."
+    }
+    participant "JobStore" {
+      kind = "port"
+      responsibility = "Persiste job, callbackUrl, secret de signature, statut."
+    }
+    participant "AsyncWorker" {
+      kind = "processor"
+      responsibility = "Exécute le traitement ; déclenche WebhookDispatcher en état terminal."
+    }
+    participant "WebhookDispatcher" {
+      kind = "secondary_adapter"
+      responsibility = "POST vers callback ; retries backoff ; signature/HMAC si spec."
+    }
+  }
+
+  relations {
+    relation "Client" -> "AsyncIngress" { type = "submits_with_callback" }
+    relation "AsyncWorker" -> "JobStore" { type = "updates" }
+    relation "AsyncWorker" -> "WebhookDispatcher" { type = "triggers_on_complete" }
+    relation "WebhookDispatcher" -> "Client" { type = "delivers_http_post" }
+  }
+
+  algorithm {
+    step 1 { action = "Valider callbackUrl (HTTPS, allowlist si spec)." }
+    step 2 { action = "Accepter async ; worker traite le job." }
+    step 3 { action = "WebhookDispatcher envoie payload terminal avec retries documentés." }
+    step 4 { action = "Client ack 2xx ; sinon retry jusqu'à politique max." }
+  }
+
+  generation {
+    required = ["AsyncIngress", "JobStore", "AsyncWorker", "WebhookDispatcher"]
+    optional = ["HMAC signature", "callback registration API", "replay idempotency key"]
+    forbidden = [
+      "Callback HTTP sans TLS en production sauf spec explicite",
+      "Secrets de signature dans l'URL query string",
+      "Retries infinis sans dead-letter ou état FAILED visible",
+      "Mélanger polling obligatoire avec variante webhook-only sans spec"
+    ]
+  }
+
+  tests {
+    assertion "dispatch" {
+      verifies = "État terminal déclenche POST vers callback avec corps attendu."
+    }
+    assertion "signature" {
+      verifies = "Si spec exige signature, le client peut la vérifier sur fixture."
+    }
+  }
+
+  composition {
+    compatible = ["Hexagonal", "AsyncRequestReply-Correlation", "Adapter"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.infrastructure.secondary.webhook;
+
+@Component
+@RequiredArgsConstructor
+public class AsyncCheckoutCompletionHandler {
+  private final CheckoutJobStore jobStore;
+  private final WebhookDispatcher webhookDispatcher;
+
+  public void onCheckoutFinished(String jobId, CheckoutJobResult result) {
+    jobStore.markDone(jobId, result);
+    CheckoutJob job = jobStore.getRequired(jobId);
+    webhookDispatcher.postSigned(
+        job.callbackUrl(),
+        result,
+        job.signingSecret());
+  }
+}
+      """
+    }
+  }
+}

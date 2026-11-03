@@ -1,0 +1,94 @@
+strategy_skeleton 1.0
+
+strategy "Iterator" {
+  id = "iterator"
+  family = "behavioral"
+  implementation_language = "project"
+
+  intent {
+    """
+    Parcourir une collection sans exposer sa représentation interne ni
+    coupler le client à la structure de stockage.
+    """
+  }
+
+  applicability {
+    signals = ["traverse", "collection", "pagination", "stream cursor"]
+  }
+
+  participants {
+    participant "Iterator" {
+      kind = "cursor_contract"
+      responsibility = "hasNext, next (ou idiome project stream)."
+    }
+    participant "ConcreteIterator" {
+      kind = "implementation"
+      responsibility = "Parcourt la structure aggregate concrète."
+    }
+    participant "Aggregate" {
+      kind = "collection"
+      responsibility = "createIterator() ; contient les éléments."
+    }
+    participant "Client" {
+      kind = "consumer"
+      responsibility = "Boucle via Iterator uniquement."
+    }
+  }
+
+  relations {
+    relation "Aggregate" -> "Iterator" { type = "creates" }
+    relation "ConcreteIterator" -> "Iterator" { type = "implements" }
+    relation "ConcreteIterator" -> "Aggregate" { type = "traverses" }
+    relation "Client" -> "Iterator" { type = "uses" }
+  }
+
+  generation {
+    required = ["Iterator", "ConcreteIterator", "Aggregate"]
+    optional = ["remove policy", "fail-fast on concurrent modification"]
+    forbidden = [
+      "Client indexe la structure interne de Aggregate",
+      "Iterator qui expose la collection mutable sous-jacente",
+      "next() sans hasNext contract"
+    ]
+  }
+
+  tests {
+    assertion "exhaustion" {
+      verifies = "Parcours complet sans omission ni double visit."
+    }
+    assertion "isolation" {
+      verifies = "Modifier Aggregate pendant itération respecte la politique documentée."
+    }
+  }
+
+  composition {
+    compatible = ["Composite", "Visitor", "GraphQLStream"]
+  }
+
+  examples {
+    java {
+      """
+package <basePackage>.domain.model.cart;
+
+public final class CartLineIterator implements Iterator<CartLine> {
+  private final List<CartLine> lines;
+  private int index;
+
+  public CartLineIterator(List<CartLine> lines) {
+    this.lines = lines;
+  }
+
+  @Override
+  public boolean hasNext() {
+    return index < lines.size();
+  }
+
+  @Override
+  public CartLine next() {
+    return lines.get(index++);
+  }
+}
+      """
+    }
+  }
+}

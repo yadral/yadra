@@ -1,0 +1,22 @@
+ksl 1.0
+
+project "domain-common" {
+  kind = "lib"
+  parent = "yadral-platform"
+  version = "1.0.0"
+
+  meta {
+    name = "Domain Common Library"
+    description = "Value Objects universels (Money, Currency, Uuid) et interfaces fondamentales"
+    labels = ["library", "domain", "common"]
+  }
+
+  repo {
+    path = "libs/domain-common"
+  }
+
+  dependencies {
+    parent_build = "root-parent-pom"
+    libs = []
+  }
+}

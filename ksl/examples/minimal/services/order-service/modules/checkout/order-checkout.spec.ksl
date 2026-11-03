@@ -1,0 +1,233 @@
+ksl 1.0
+
+spec "order-checkout" {
+  module = "checkout"
+
+  meta {
+    name = "Order Checkout & Payment"
+    target_service = "order-service"
+    version = "1.0"
+    labels = ["checkout", "payment", "critical-path"]
+  }
+
+  // OpenAPI contract evolution: high-level intent, Yadra handles the technical mapping
+  openapi {
+    ref = "docs/openapi/order-service-v1.yaml"
+    action = "update" // create | update | delete | deprecate
+    version = "1.2.0"
+    breaking_changes = false
+    description = """
+    Update checkout contract to support synchronous payment authorization and return receipt URL.
+    Deprecate legacy v0 checkout endpoint and remove obsolete temporary draft routes.
+    """
+  }
+
+  intention {
+    """
+    Enable customers to finalize their active cart online by validating stock availability,
+    charging their payment method synchronously via the banking gateway, and publishing
+    a confirmation event without risking double charges or message loss.
+    """
+  }
+
+  scope {
+    included = [
+      "Cart integrity validation and currency-aware total amount calculation",
+      "Synchronous payment authorization call with configurable timeouts",
+      "Order persistence in PAID status and transactional Outbox recording",
+      "OrderPaid event publication to dedicated Kafka topic",
+      "Customer transaction receipt archival to S3 bucket"
+    ]
+    excluded = [
+      "Refund and dispute workflows",
+      "Certified B2B invoicing and digital signatures",
+      "Physical parcel logistics and carrier shipping labels"
+    ]
+  }
+
+  // Visual flow diagrams: local image, remote URL, or web page with description
+  flows {
+    flow "checkout-nominal-sequence" {
+      description = "Nominal sequence for cart validation, stock reservation, payment authorization, and transactional Outbox publication"
+      ref = "docs/diagrams/order-checkout-flow.png"
+    }
+  }
+
+  // API Integrations: internal or external, with authentication and documentation
+  integrations {
+    // Internal API: client generated according to project.ksl communications
+    api "payment-gateway" {
+      type = "internal"
+      endpoint = "POST /api/v1/payments/authorize"
+      auth = "jwt"
+      in_config = true
+    }
+
+    // External third-party API: requires documentation reference and API key auth
+    api "stripe-fraud-check" {
+      type = "external"
+      endpoint = "POST https://api.stripe.com/v1/radar/early_fraud_warnings"
+      doc = "https://docs.stripe.com/api/radar/early_fraud_warnings"
+      auth = "apikey"
+      in_config = true
+    }
+  }
+
+  // Event messaging: Kafka, RabbitMQ, SQS with free-text specifications
+  messaging {
+    kafka {
+      topic = "orders.order-paid.v1"
+      role = "producer"
+      in_config = true
+      description = """
+      Publish OrderPaidEvent using transactional outbox pattern.
+      Downstream requires 2 consumer instances in notification-worker service,
+      with manual acknowledgement and a Dead Letter Queue (DLQ) after 3 retries.
+      """
+    }
+  }
+
+  data {
+    postgres {
+      schema = "orders"
+      database = "order_service"
+      in_config = true
+      description = """
+      Order and outbox_event tables; same transaction as payment authorization.
+      """
+    }
+
+    s3 {
+      bucket = "yadral-demo-receipts"
+      in_config = true
+      description = "JSON receipts with AES256 server-side encryption and 7-year lifecycle retention."
+    }
+  }
+
+  // Structured Use Cases
+  usecases {
+    usecase "nominal-checkout" {
+      description = "Standard order checkout with accepted payment"
+      given = "Customer with non-empty cart, articles available in inventory, valid credit card"
+
+      when = [
+        "1. Customer initiates checkout on active cart",
+        "2. System validates cart constraints via Validator",
+        "3. System reserves stock with InventoryService",
+        "4. System submits payment authorization to PaymentGateway",
+        "5. Gateway returns successful charge authorization",
+        "6. Order is persisted with PAID status",
+        "7. OrderPaid event is appended to Outbox for Kafka publication",
+        "8. JSON receipt is uploaded to S3 bucket"
+      ]
+
+      then = [
+        "Order is stored in database with PAID status",
+        "Inventory reservations are converted into permanent deduction",
+        "OrderPaid event is saved in Outbox table within the same transaction",
+        "Receipt is stored in S3 and 201 Created response is returned with order ID"
+      ]
+    }
+
+    usecase "insufficient-stock" {
+      description = "Checkout rejected due to out of stock item"
+      given = "One item in cart no longer has enough available inventory"
+
+      when = [
+        "1. Customer initiates checkout",
+        "2. Stock verification reveals insufficient inventory",
+        "3. Checkout process halts immediately"
+      ]
+
+      then = [
+        "No payment transaction is requested from PaymentGateway",
+        "No active order is recorded in database",
+        "Customer is notified of depleted items to adjust cart"
+      ]
+    }
+
+    usecase "payment-declined" {
+      description = "Card charge declined by issuing bank"
+      given = "Insufficient funds or bank rejection"
+
+      when = [
+        "1. Temporary stock reservation completed successfully",
+        "2. PaymentGateway returns payment DECLINED",
+        "3. System immediately releases stock reservation"
+      ]
+
+      then = [
+        "Order remains recorded with PAYMENT_REJECTED status",
+        "Reserved stocks are returned to available inventory",
+        "Customer can retry payment with another method without losing cart items"
+      ]
+    }
+  }
+
+  outputs {
+    kinds = ["ksl", "code", "data", "tests", "docs", "e2e"]
+
+    phase {
+      execute = ["code", "data", "tests"]
+      gate = ["docs", "e2e"]
+    }
+
+    docs {
+      title = "Order Checkout API Specification"
+      swagger = "/docs/swagger-ui"
+      redoc = "/docs/redoc"
+      confluence = "https://docs.yadral.com/display/ARCH/Order+Checkout"
+      update_jira = true
+    }
+
+    e2e {
+      scenarios = [
+        "Full nominal checkout flow with mocked payment gateway",
+        "Payment rejection with automated stock release verification"
+      ]
+      mock_externals = true
+    }
+  }
+
+  strategies {
+    strategy "Hexagonal" {
+      role = "architecture"
+      description = """
+      Checkout orchestration in application layer; payment and inventory ports;
+      adapters for REST, postgres order tables, and external payment gateway.
+      """
+    }
+    strategy "Validator" {
+      role = "pattern"
+      description = """
+      Validate cart readiness, payment payload, and stock reservation rules before
+      committing checkout and emitting domain events.
+      """
+    }
+    strategy "Outbox" {
+      role = "pattern"
+      description = """
+      Persist order-confirmed events in an outbox table alongside the order transaction;
+      relay to messaging for downstream fulfillment consumers.
+      """
+    }
+    strategy "FluentCaseTest" {
+      role = "testing"
+      description = """
+      Nominal and payment-rejection flows from outputs.e2e scenarios as FluentCaseTest
+      classes with mocked payment gateway and stock service.
+      """
+    }
+  }
+
+  budget {
+    max_repair_loops = 5
+    max_iterations = 8
+  }
+
+  references {
+    story = "STORY-842: Order checkout and secure payment"
+    jira = "ORD-142"
+    architecture_doc = "docs/architecture/adr-009-hexagonal-outbox.md"
+  }
+}
