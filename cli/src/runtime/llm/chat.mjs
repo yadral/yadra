@@ -1,4 +1,8 @@
-const DEFAULT_OPENAI_BASE = "https://api.openai.com/v1";
+import {
+  openAiAuthMisrouteHint,
+  resolveOpenAiCompatibleBaseUrl,
+} from "./resolve-endpoint.mjs";
+import { cursorAgentChatCompletion } from "./cursor-agent-cli.mjs";
 
 function resolveAuth(credentials) {
   if (credentials.token) {
@@ -35,12 +39,17 @@ export async function chatCompletion(options) {
   if (provider === "anthropic") {
     return anthropicMessages(options);
   }
-  return openaiChatCompletions(options);
+  if (provider === "cursor") {
+    return cursorAgentChatCompletion(options);
+  }
+  const baseUrl = resolveOpenAiCompatibleBaseUrl(provider, options.baseUrl);
+  return openaiChatCompletions({ ...options, provider, baseUrl });
 }
 
 async function openaiChatCompletions({
   model,
   baseUrl,
+  provider,
   timeoutMs,
   credentials,
   messages,
@@ -57,7 +66,11 @@ async function openaiChatCompletions({
     );
   }
 
-  const url = `${(baseUrl ?? DEFAULT_OPENAI_BASE).replace(/\/$/, "")}/chat/completions`;
+  const root = (baseUrl ?? resolveOpenAiCompatibleBaseUrl(provider, null)).replace(
+    /\/$/,
+    "",
+  );
+  const url = `${root}/chat/completions`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs ?? 120_000);
 
@@ -76,7 +89,16 @@ async function openaiChatCompletions({
       }),
     });
     if (!res.ok) {
-      throw new Error(`LLM HTTP ${res.status}: ${await readErrorBody(res)}`);
+      const detail = await readErrorBody(res);
+      const hint = openAiAuthMisrouteHint({
+        provider,
+        baseUrl: root,
+        token: credentials?.token,
+        httpStatus: res.status,
+        detail,
+      });
+      if (hint) throw new Error(hint);
+      throw new Error(`LLM HTTP ${res.status}: ${detail}`);
     }
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content;

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getProfileConfig } from "../config/load-configure.mjs";
+import { resolveCursorEndpoint } from "./llm/cursor-agent-cli.mjs";
 import { distRoot } from "./distribution.mjs";
 
 /** Plan id → fichiers draft v1 (fallback si plan-validate absent). */
@@ -91,11 +92,17 @@ export function llmRuntime(llm) {
   const { configure, credentials } = getProfileConfig(profile);
   const timeoutRaw = configure.timeout ?? process.env.YADRA_LLM_TIMEOUT;
   const timeoutMs = timeoutRaw ? Number(timeoutRaw) : 120_000;
+  const provider = (configure.provider ?? "openai").toLowerCase();
+  const storedBase = configure.base_url ?? configure.baseUrl;
+  const baseUrl =
+    provider === "cursor"
+      ? resolveCursorEndpoint(storedBase)
+      : storedBase;
   return {
     profile,
-    provider: configure.provider ?? "openai",
+    provider,
     model: llm.model ?? configure.model,
-    baseUrl: configure.base_url ?? configure.baseUrl,
+    baseUrl,
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 120_000,
     credentials,
   };

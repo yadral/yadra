@@ -4,8 +4,9 @@ import {
   setProfileCredentials,
   setProfileFields,
 } from "../config/load-configure.mjs";
+import { cmdConfigureTest } from "./configure-test.mjs";
 
-export function cmdConfigure(sub, positional, flags) {
+export async function cmdConfigure(sub, positional, flags, cwd = process.cwd()) {
   const profile = flags.profile ?? "default";
 
   if (!sub || sub === "list") {
@@ -76,6 +77,14 @@ export function cmdConfigure(sub, positional, flags) {
     setProfileCredentials(profile, fields);
     console.log(`Credentials for "${profile}" saved (~/.config/yadra/credentials)`);
     return 0;
+  }
+
+  if (sub === "test") {
+    if (positional.length > 0) {
+      console.error(`Unexpected argument: ${positional[0]}`);
+      return 2;
+    }
+    return cmdConfigureTest(flags, cwd);
   }
 
   if (sub === "get") {

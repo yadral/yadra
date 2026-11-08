@@ -43,8 +43,12 @@ Affiche la version lue depuis yadra/manifest.mf, KSL_HOME, grammaire et projet a
   yadra configure set --profile <nom> [--provider <id>] [--model <id>] [--base-url <url>] [--timeout <ms>]
   yadra configure credentials --profile <nom> [--token <val>] [--username <u>] [--password <p>]
   yadra configure get <clé> [--profile <nom>]
+  yadra configure test [--profile <nom>] [--model <id>] [--prompt <texte>] [--auth-only]
 
-Stocke configure et credentials sous ~/.config/yadra/.`,
+Stocke configure et credentials sous ~/.config/yadra/.
+
+test : valide token (+ échange crsr_ pour cursor) et envoie un court appel au modèle configuré
+  (profil du projet actif si --profile omis). --auth-only : credentials sans appel LLM.`,
     project: `yadra project — registre multi-projets (v0.1.1+)
 
 Un projet = KSL_PROJECT_HOME (specs .ksl) + PROJECT_HOME (code généré).
@@ -69,6 +73,7 @@ Options (add / update):
   --profile <name>            Profil dans ~/.config/yadra/configure
   --model <id>                Modèle par défaut pour formalize (SKILLS A/B)
   --no-current                (add) n'active pas après création
+  --allow-pending-ksl         (add/update) enregistre les chemins sans root.project.ksl (init)
 
 Surcharge ponctuelle (formalize, validate, seal, plan):
   --project <name>            Projet enregistré sans changer "current"
@@ -88,7 +93,7 @@ T1 · une commande : A+B (LLM + SKILLS formalize si .ksl absents) puis C (valida
 --skip-llm : branche A/B = plans/SKILLS seulement (pas de génération KSL).
 
 Prérequis : yadra project use <name> (ou --project / --ksl-project-home)
-Entrée obligatoire : <dossier-documents>/feature.yadra.md (output_paths.spec requis).
+Entrée obligatoire : <dossier-documents>/feature.yadra.md (au moins un output_paths : root, module ou spec).
 
 Si des .ksl manquent (output_paths) : A+B in-process (LLM + SKILLS) puis enchaîne C si écriture OK.
 Si --skip-llm et .ksl manquants : affiche plans/SKILLS, code 1.

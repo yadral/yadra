@@ -72,6 +72,9 @@ function allowedFlags(cmd, sub) {
       return ["--profile", "--token", "--username", "--password"];
     }
     if (sub === "get") return ["--profile"];
+    if (sub === "test") {
+      return ["--profile", "--model", "--prompt", "--auth-only", "--timeout"];
+    }
     return [];
   }
   if (cmd === "strategies") {
@@ -96,6 +99,7 @@ function allowedFlags(cmd, sub) {
         "--profile",
         "--current",
         "--no-current",
+        "--allow-pending-ksl",
       ];
     }
     if (sub === "set-profile") {
@@ -213,7 +217,7 @@ async function main() {
       break;
     case "configure": {
       const [sub, ...args] = positional;
-      code = cmdConfigure(sub, args, flags);
+      code = await cmdConfigure(sub, args, flags, cwd);
       break;
     }
     case "project": {
