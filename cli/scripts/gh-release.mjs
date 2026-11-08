@@ -15,6 +15,13 @@ const pkg = JSON.parse(
 );
 const version = pkg.version;
 const tag = process.argv[2] ?? `yadra-cli-v${version}`;
+const tagVersion = tag.match(/v(\d+\.\d+\.\d+)/)?.[1];
+if (tagVersion && tagVersion !== version) {
+  console.error(
+    `Tag ${tag} does not match package.json version ${version}. Bump cli/package.json and manifest.mf first.`,
+  );
+  process.exit(1);
+}
 const scopedTgzBase = pkg.name.startsWith("@")
   ? pkg.name.slice(1).replace("/", "-")
   : pkg.name;
