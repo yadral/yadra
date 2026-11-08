@@ -13,7 +13,7 @@ yadra formalize <documents-folder> [options]
 
 **Prerequisites:** `yadra project use <name>` with **`KSL_PROJECT_HOME`**; LLM via **`yadra configure`** + credentials (unless **`--skip-llm`** on the A/B branch).
 
-**Required input:** `<documents-folder>/feature.yadra.md` with **`output_paths.spec`** (and `module` / `root` when declared).
+**Required input:** `<documents-folder>/feature.yadra.md` with **at least one** `output_paths` entry: **`spec`**, **`module`**, or **`root`** (matching the deliverable — no need to duplicate all three).
 
 ## Behavior (packaged CLI — T1 complete)
 

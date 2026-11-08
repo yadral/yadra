@@ -13,7 +13,7 @@ yadra formalize <dossier-documents> [options]
 
 **Prérequis :** `yadra project use <name>` avec **`KSL_PROJECT_HOME`** ; LLM **`yadra configure`** + credentials (sauf **`--skip-llm`** sur la branche A/B).
 
-**Entrée obligatoire :** `<dossier-documents>/feature.yadra.md` avec **`output_paths.spec`** (et `module` / `root` si déclarés).
+**Entrée obligatoire :** `<dossier-documents>/feature.yadra.md` avec **au moins un** `output_paths` : **`spec`**, **`module`** ou **`root`** (selon le livrable — pas besoin de dupliquer les trois).
 
 ## Comportement (CLI packagé — T1 terminé)
 

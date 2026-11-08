@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseArgs } from "../src/util/parse-args.mjs";
-import { parseFeatureYadraContent } from "../src/util/feature-yadra.mjs";
+import {
+  parseFeatureYadraContent,
+  primaryDeliverablePath,
+  hasDeliverableOutputPaths,
+} from "../src/util/feature-yadra.mjs";
 
 test("parseArgs reads separated and inline values", () => {
   const parsed = parseArgs([
@@ -49,4 +53,25 @@ other:
     module: "services/members/members.module.ksl",
     spec: "services/members/create.spec.ksl",
   });
+});
+
+test("primaryDeliverablePath accepts root, module, or spec alone", () => {
+  assert.equal(
+    primaryDeliverablePath({ root: "root.project.ksl" }),
+    "root.project.ksl",
+  );
+  assert.equal(
+    primaryDeliverablePath({ module: "momo-cm.module.ksl" }),
+    "momo-cm.module.ksl",
+  );
+  assert.equal(
+    primaryDeliverablePath({ spec: "foo.spec.ksl" }),
+    "foo.spec.ksl",
+  );
+  assert.equal(
+    primaryDeliverablePath({ spec: "a.spec.ksl", root: "root.project.ksl" }),
+    "a.spec.ksl",
+  );
+  assert.equal(hasDeliverableOutputPaths({}), false);
+  assert.equal(hasDeliverableOutputPaths({ root: "r.ksl" }), true);
 });

@@ -58,7 +58,7 @@ Tous les validate **exit 0** avant de sceller.
 ## Étape 2 — Scellement
 
 ```bash
-yadra seal "$KSL_PROJECT_HOME/<output_paths.spec>"
+yadra seal "$KSL_PROJECT_HOME/<output_paths.spec|module|root>"
 ```
 
 Fichiers **project** co-émis (greenfield) :

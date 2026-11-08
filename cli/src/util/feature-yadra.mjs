@@ -1,6 +1,23 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+/** Ordre de priorité pour seal / ancrage LLM (spec métier d’abord, puis module, puis racine projet). */
+export const DELIVERABLE_OUTPUT_KEYS = ["spec", "module", "root"];
+
+/** Chemin relatif KSL principal déclaré dans feature.yadra.md (au moins un des trois requis pour formalize). */
+export function primaryDeliverablePath(outputPaths) {
+  if (!outputPaths) return null;
+  for (const key of DELIVERABLE_OUTPUT_KEYS) {
+    const rel = outputPaths[key];
+    if (rel) return rel;
+  }
+  return null;
+}
+
+export function hasDeliverableOutputPaths(outputPaths) {
+  return primaryDeliverablePath(outputPaths) !== null;
+}
+
 /** Minimal parser for feature.yadra.md (output_paths, kind). */
 export function parseFeatureYadraContent(content) {
   const outputPaths = {};

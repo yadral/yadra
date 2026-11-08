@@ -2,7 +2,11 @@ import { existsSync, mkdirSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { runSeal, runValidate } from "../runtime/ksl-lib.mjs";
 import { requireKslProjectHome, syncKslToolEnv } from "../config/load-projects.mjs";
-import { loadFeatureYadra } from "../util/feature-yadra.mjs";
+import {
+  hasDeliverableOutputPaths,
+  primaryDeliverablePath,
+  loadFeatureYadra,
+} from "../util/feature-yadra.mjs";
 import { printAbOrchestration } from "../util/formalize-contract.mjs";
 import { runPhaseAComprendre } from "../runtime/formalize/phase-a.mjs";
 import { runPhaseBProduire } from "../runtime/formalize/phase-b.mjs";
@@ -15,6 +19,7 @@ import {
 
 function kslFilesFromFeature(kslRoot, feature) {
   const paths = [];
+  const seen = new Set();
   for (const key of ["root", "module", "spec"]) {
     const outputPath = feature.outputPaths[key];
     if (!outputPath) continue;
@@ -28,6 +33,8 @@ function kslFilesFromFeature(kslRoot, feature) {
         `output_paths.${key} escapes KSL_PROJECT_HOME: ${outputPath}`,
       );
     }
+    if (seen.has(absolute)) continue;
+    seen.add(absolute);
     paths.push(absolute);
   }
   return paths;
@@ -57,8 +64,8 @@ function runPhaseC(flags, cwd, ws, feature, files) {
     return 0;
   }
 
-  const specRel = feature.outputPaths.spec;
-  const specAbs = resolve(ws.kslProjectHome, specRel);
+  const sealRel = primaryDeliverablePath(feature.outputPaths);
+  const specAbs = resolve(ws.kslProjectHome, sealRel);
   const include = flags.include.map((p) => resolve(cwd, p));
   const missingInclude = include.filter((p) => !existsSync(p));
   if (missingInclude.length > 0) {
@@ -119,9 +126,10 @@ export async function cmdFormalize(flags, positional, cwd, wsOptions = {}) {
     return 1;
   }
 
-  const specRel = feature.outputPaths.spec;
-  if (!specRel) {
-    console.error("feature.yadra.md: output_paths.spec est requis.");
+  if (!hasDeliverableOutputPaths(feature.outputPaths)) {
+    console.error(
+      "feature.yadra.md: au moins un output_paths (root, module ou spec) est requis.",
+    );
     return 1;
   }
 

@@ -19,6 +19,7 @@ import {
   buildComprendreMessages,
 } from "./build-comprendre-prompt.mjs";
 import { extractSingleCompact } from "./parse-llm-files.mjs";
+import { primaryDeliverablePath } from "../../util/feature-yadra.mjs";
 
 function loadText(path) {
   return readFileSync(path, "utf8");
@@ -44,10 +45,11 @@ export async function runPhaseAComprendre({
   });
   const strategyCandidates = formatStrategyCandidates(suggested);
 
+  const primaryRel = primaryDeliverablePath(feature.outputPaths);
   const kslSnippets = readNeighborKslSnippets(
     ws.kslProjectHome,
     feature.outputPaths,
-    feature.outputPaths.spec,
+    primaryRel,
   );
 
   const compactPath = join(tmpDir, compactFileName);
