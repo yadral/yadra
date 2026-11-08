@@ -34,6 +34,9 @@ export function parseArgs(argv) {
     noVerify: false,
     allowNoExecute: false,
     produce: false,
+    allowPendingKsl: false,
+    authOnly: false,
+    prompt: undefined,
   };
   const positional = [];
   const provided = new Set();
@@ -56,6 +59,7 @@ export function parseArgs(argv) {
     "--family": "family",
     "--role": "role",
     "--section": "section",
+    "--prompt": "prompt",
   };
 
   function readValue(flag, inlineValue, index) {
@@ -96,6 +100,8 @@ export function parseArgs(argv) {
     else if (a === "--no-verify") flags.noVerify = true;
     else if (a === "--allow-no-execute") flags.allowNoExecute = true;
     else if (a === "--produce") flags.produce = true;
+    else if (a === "--allow-pending-ksl") flags.allowPendingKsl = true;
+    else if (a === "--auth-only") flags.authOnly = true;
     else if (valueFlags[a]) {
       const parsed = readValue(a, inlineValue, i);
       if (parsed.error) {

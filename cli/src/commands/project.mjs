@@ -21,6 +21,7 @@ function projectOptionsFromFlags(flags) {
     model: flags.model,
     profile: flags.profile,
     setCurrent: !flags.noCurrent,
+    allowPendingKsl: flags.allowPendingKsl,
   };
 }
 
@@ -69,7 +70,13 @@ export function cmdProject(sub, positional, flags, cwd) {
       console.log(`Project added: ${name}`);
       console.log(`  KSL_PROJECT_HOME=${record.kslProjectHome}`);
       if (record.projectHome) console.log(`  PROJECT_HOME=${record.projectHome}`);
-      console.log(`  root: ${record.rootProjectFile} (${record.projectId})`);
+      if (record.rootProjectFile) {
+        console.log(`  root: ${record.rootProjectFile} (${record.projectId})`);
+      } else {
+        console.log(
+          "  KSL root: (pending — add root.project.ksl with kind = \"root\", then yadra project update)",
+        );
+      }
       printLlm(record);
       return 0;
     } catch (e) {
@@ -181,6 +188,10 @@ export function cmdProject(sub, positional, flags, cwd) {
     if (meta) {
       console.log(`  root file: ${meta.rootProjectFile}`);
       console.log(`  project id: ${meta.projectId}`);
+    } else {
+      console.log(
+        "  KSL root: (pending — no kind = \"root\" *.project.ksl under KSL_PROJECT_HOME yet)",
+      );
     }
     console.log(`  LLM profile: ${p.llm?.profile ?? "default"}`);
     console.log(`  LLM model:   ${p.llm?.model ?? "(from configure)"}`);

@@ -196,7 +196,32 @@ function buildProjectRecord(cwd, options, existing = null) {
     throw new Error("--ksl-project-home <path> is required.");
   }
   if (options.profile) assertProfileName(options.profile);
-  const rootMeta = validateAndBuildContext(absPath(cwd, kslPath));
+  const kslAbs = absPath(cwd, kslPath);
+  if (options.allowPendingKsl) {
+    mkdirSync(kslAbs, { recursive: true });
+    const projectHome = options.projectHome
+      ? absPath(cwd, options.projectHome)
+      : existing?.projectHome ?? null;
+    if (projectHome) mkdirSync(projectHome, { recursive: true });
+    return {
+      kslProjectHome: kslAbs,
+      projectHome,
+      yadraProjectHome: options.yadraProjectHome
+        ? absPath(cwd, options.yadraProjectHome)
+        : existing?.yadraProjectHome ?? defaultYadraProjectHome(),
+      rootProjectFile: null,
+      projectId: null,
+      llm: {
+        profile:
+          options.profile ??
+          existing?.llm?.profile ??
+          "default",
+        model: options.model ?? existing?.llm?.model ?? undefined,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  const rootMeta = validateAndBuildContext(kslAbs);
   return {
     kslProjectHome: rootMeta.projectRoot,
     projectHome: options.projectHome

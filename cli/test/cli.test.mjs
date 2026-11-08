@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -150,6 +156,40 @@ test("project add and use persist absolute homes and profile", () => {
     rmSync(home, { recursive: true, force: true });
     rmSync(kslHome, { recursive: true, force: true });
     rmSync(appHome, { recursive: true, force: true });
+  }
+});
+
+test("project add --allow-pending-ksl registers paths before root.project.ksl exists", () => {
+  const home = mkdtempSync(join(tmpdir(), "yadra-cli-home-"));
+  const base = mkdtempSync(join(tmpdir(), "yadra-pending-"));
+  const kslPath = join(base, "ksl");
+  const appPath = join(base, "root");
+  try {
+    const added = run(
+      [
+        "project",
+        "add",
+        "pending-demo",
+        "--ksl-project-home",
+        kslPath,
+        "--project-home",
+        appPath,
+        "--allow-pending-ksl",
+      ],
+      { home },
+    );
+    assert.equal(added.status, 0, added.stderr);
+    assert.match(added.stdout, /pending/i);
+    const reg = JSON.parse(
+      readFileSync(join(home, ".config/yadra/projects.json"), "utf8"),
+    );
+    assert.equal(reg.projects["pending-demo"].kslProjectHome, kslPath);
+    assert.equal(reg.projects["pending-demo"].rootProjectFile, undefined);
+    assert.ok(existsSync(kslPath));
+    assert.ok(existsSync(appPath));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(base, { recursive: true, force: true });
   }
 });
 
