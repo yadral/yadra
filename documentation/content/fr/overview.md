@@ -89,14 +89,17 @@ eval "$(yadra project export)"
 
 ```bash
 # 1. Configurer le fournisseur LLM
-yadra configure set --profile default --provider anthropic --model claude-sonnet-4-20250514
-yadra configure credentials --profile default --token "sk-ant-..."
+# Clé crsr_… : provider cursor (défaut api2.cursor.sh — pas de base-url requis)
+yadra configure set --profile cursor --provider cursor --model composer-2.5-fast
+yadra configure credentials --profile cursor --token "VOTRE_CLE_CRSR"
+yadra configure test
+# Prérequis : CLI Cursor (`cursor agent`). Alternative : --provider openai + clé sk-…
 
 # 2. Enregistrer et activer un projet
 yadra project add tontine \
   --ksl-project-home ~/projets/tontine-ksl \
   --project-home ~/projets/tontine-app \
-  --model claude-sonnet-4-20250514
+  --model composer-2.5-fast
 
 # 3. Formaliser et sceller une fonctionnalité à partir de son dossier de contexte
 yadra formalize ./contexte/member-creation/ --seal

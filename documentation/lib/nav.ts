@@ -33,6 +33,7 @@ export const AVAILABLE_VERSIONS = [
   "0.1.7",
   "0.1.8",
   "0.1.9",
+  "0.1.10",
 ] as const;
 
 /** Diagrammes HTML embarqués (indépendants du bump CLI). */
