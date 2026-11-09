@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveSpecPath, runSeal } from "../runtime/ksl-lib.mjs";
+import { resolveKslDeliverablePath, runSeal } from "../runtime/ksl-lib.mjs";
 import {
   syncKslToolEnv,
   requireKslProjectHome,
@@ -45,9 +45,12 @@ export async function cmdSeal(flags, positional, cwd, wsOptions = {}) {
 
   let spec;
   try {
-    spec = resolveSpecPath(positional[0] ?? ".", cwd);
+    spec = resolveKslDeliverablePath(positional[0] ?? ".", cwd);
   } catch (e) {
     console.error(e.message);
+    if (/Not a KSL deliverable|\.spec \/ \.module/i.test(e.message)) {
+      console.error("Tip: pour .project.ksl / .module.ksl, utilisez aussi : yadra formalize <dossier>");
+    }
     return 2;
   }
   const include = flags.include.map((p) => resolve(cwd, p));

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileKind } from "./paths.mjs";
+import { stripKslComments } from "./strip-ksl-comments.mjs";
 
 export function validateL2(path) {
   const kind = fileKind(path);
@@ -25,11 +26,12 @@ export function validateL2(path) {
         errors.push(`missing sibling ${domain}.module.ksl in ${dir}`);
       } else {
         const modText = readFileSync(expectedModuleFile, "utf8");
+        const modCode = stripKslComments(modText);
         const specName = basename(path);
         const listed =
           modText.includes(`"${specName}"`) ||
           modText.includes(`'${specName}'`);
-        if (!listed && /specs\s*=/.test(modText)) {
+        if (!listed && /specs\s*=\s*\[/.test(modCode)) {
           errors.push(`${specName} not found in specs = [...] of ${expectedModuleFile}`);
         }
       }

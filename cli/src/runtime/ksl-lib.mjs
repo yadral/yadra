@@ -11,7 +11,9 @@ export {
 } from "../../vendor/yadral-dist/ksl/tools/yadra/lib/ksl-home.mjs";
 export {
   resolveSpecPath,
+  resolveKslDeliverablePath,
   specIdFromPath,
+  fileKind,
 } from "../../vendor/yadral-dist/ksl/tools/yadra/lib/paths.mjs";
 export {
   applyBindingTemplate,
