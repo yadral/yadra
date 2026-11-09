@@ -41,3 +41,9 @@ test("extractCompactKsl accepts fenced block", () => {
   const text = "Here:\n```compact.ksl\n# deliverables\nksl_levels: [spec]\n```";
   assert.match(extractCompactKsl(text), /^# deliverables/);
 });
+
+test("extractCompactKsl skips prose before deliverables", () => {
+  const text =
+    "Voici l'analyse.\n\n# deliverables\nksl_levels: [spec]\n";
+  assert.match(extractCompactKsl(text), /^# deliverables/);
+});

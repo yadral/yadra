@@ -69,6 +69,27 @@ export function formatMessagesForCursorAgent(messages) {
   return parts.join("\n\n");
 }
 
+/** T1 formalize A/B : le CLI Cursor doit émettre du KSL compact, pas une réponse chat. */
+export function isYadraFormalizePrompt(messages) {
+  const blob = messages.map((m) => String(m.content ?? "")).join("\n");
+  return (
+    /# deliverables/i.test(blob) ||
+    /T1 · A · COMPRENDRE/i.test(blob) ||
+    /produire un `\.compact\.ksl`/i.test(blob) ||
+    /compact\.ksl/i.test(blob)
+  );
+}
+
+export const FORMALIZE_CURSOR_SUFFIX = [
+  "",
+  "---",
+  "CONSIGNE DE SORTIE (obligatoire — Yadra T1)",
+  "Réponds UNIQUEMENT avec le fichier `.compact.ksl` demandé ci-dessus.",
+  "La toute première ligne de ta réponse DOIT être exactement : # deliverables",
+  "Aucune phrase d’introduction, aucun résumé, aucune question après le KSL.",
+  "Tu peux entourer le tout d’une seule fence ```compact.ksl … ```.",
+].join("\n");
+
 function mapCursorModel(model) {
   if (!model || model === "default") return "composer-2.5-fast";
   return model;
@@ -150,8 +171,12 @@ export async function cursorAgentChatCompletion({
 
   const endpoint = resolveCursorEndpoint(baseUrl);
   const cli = resolveCursorCli();
-  const prompt = formatMessagesForCursorAgent(messages);
+  let prompt = formatMessagesForCursorAgent(messages);
   if (!prompt) throw new Error("Cursor agent: messages vides");
+  const formalize = isYadraFormalizePrompt(messages);
+  if (formalize) {
+    prompt = `${prompt}\n${FORMALIZE_CURSOR_SUFFIX}`;
+  }
 
   /** Le CLI accepte crsr_ directement ; on tente aussi l’exchange pour diagnostic. */
   let apiKey = userApiKey;
@@ -167,13 +192,16 @@ export async function cursorAgentChatCompletion({
     }
   }
 
+  /** `ask` = Q&A (prose) — mauvais pour T1. Défaut formalize : pas de --mode (sortie directe). */
+  const agentMode =
+    process.env.YADRA_CURSOR_AGENT_MODE?.trim() ||
+    (formalize ? "" : "ask");
   const args = [
     "agent",
     "--print",
     "--output-format",
     "text",
-    "--mode",
-    "ask",
+    ...(agentMode ? ["--mode", agentMode] : []),
     "--trust",
     "--api-key",
     apiKey,

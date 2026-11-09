@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { chatCompletion } from "../llm/chat.mjs";
 import { distRoot } from "../distribution.mjs";
@@ -77,9 +77,34 @@ export async function runPhaseAComprendre({
   console.log(`  catalog suggestions: ${suggested.length}`);
   console.log("  calling LLM…");
 
-  const raw = await chatCompletion({ ...llmRuntime(ctx.llm), messages });
-  const compact = extractSingleCompact(raw);
+  const llm = llmRuntime(ctx.llm);
+  let raw = await chatCompletion({ ...llm, messages });
+  let compact = extractSingleCompact(raw);
   if (!compact) {
+    console.warn("  LLM: sortie sans # deliverables — nouvel essai…");
+    if (process.env.YADRA_FORMALIZE_DEBUG_RAW === "1") {
+      mkdirSync(tmpDir, { recursive: true });
+      writeFileSync(join(tmpDir, "phase-a-llm-raw.txt"), raw, "utf8");
+    }
+    const retryMessages = [
+      ...messages,
+      { role: "assistant", content: raw },
+      {
+        role: "user",
+        content: [
+          "Ta réponse précédente n'était pas un `.compact.ksl` valide.",
+          "Répète UNIQUEMENT le fichier compact : première ligne exactement `# deliverables`.",
+          "Pas d'introduction, pas de markdown hors une fence ```compact.ksl` optionnelle.",
+        ].join("\n"),
+      },
+    ];
+    raw = await chatCompletion({ ...llm, messages: retryMessages });
+    compact = extractSingleCompact(raw);
+  }
+  if (!compact) {
+    if (process.env.YADRA_FORMALIZE_DEBUG_RAW === "1") {
+      writeFileSync(join(tmpDir, "phase-a-llm-raw-retry.txt"), raw, "utf8");
+    }
     throw new Error(
       "Réponse LLM invalide : attendu bloc commençant par '# deliverables'.",
     );
