@@ -37,6 +37,9 @@ export function parseArgs(argv) {
     allowPendingKsl: false,
     authOnly: false,
     prompt: undefined,
+    force: false,
+    refresh: false,
+    ensureLayout: true,
   };
   const positional = [];
   const provided = new Set();
@@ -102,6 +105,9 @@ export function parseArgs(argv) {
     else if (a === "--produce") flags.produce = true;
     else if (a === "--allow-pending-ksl") flags.allowPendingKsl = true;
     else if (a === "--auth-only") flags.authOnly = true;
+    else if (a === "--force") flags.force = true;
+    else if (a === "--refresh") flags.refresh = true;
+    else if (a === "--no-ensure-layout") flags.ensureLayout = false;
     else if (valueFlags[a]) {
       const parsed = readValue(a, inlineValue, i);
       if (parsed.error) {

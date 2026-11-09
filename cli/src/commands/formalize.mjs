@@ -10,6 +10,8 @@ import {
 import { printAbOrchestration } from "../util/formalize-contract.mjs";
 import { runPhaseAComprendre } from "../runtime/formalize/phase-a.mjs";
 import { runPhaseBProduire } from "../runtime/formalize/phase-b.mjs";
+import { ensureLayoutForSpecOutput } from "../runtime/formalize/ensure-layout.mjs";
+import { deliverablesNeedAbPhases } from "../runtime/formalize/deliverable-regen.mjs";
 import {
   llmFromWorkspace,
   requireLlmConfigured,
@@ -140,8 +142,6 @@ export async function cmdFormalize(flags, positional, cwd, wsOptions = {}) {
     console.error(e.message);
     return 1;
   }
-  let missing = files.filter((f) => !existsSync(f));
-
   const llm = llmFromWorkspace(ws);
   const llmErr = requireLlmConfigured(llm, {
     skipLlm: flags.skipLlm,
@@ -152,7 +152,17 @@ export async function cmdFormalize(flags, positional, cwd, wsOptions = {}) {
     return 2;
   }
 
-  if (missing.length > 0) {
+  const { need: needAb, reason: needAbReason } = deliverablesNeedAbPhases({
+    kslRoot: ws.kslProjectHome,
+    feature,
+    files,
+    flags,
+  });
+
+  if (needAb) {
+    if (needAbReason && needAbReason !== "--force") {
+      console.log(`T1 formalize — A+B (${needAbReason})`);
+    }
     const runId =
       process.env.YADRA_FORMALIZE_RUN_ID ??
       `formalize-${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -160,6 +170,7 @@ export async function cmdFormalize(flags, positional, cwd, wsOptions = {}) {
     mkdirSync(tmpDir, { recursive: true });
 
     if (flags.skipLlm) {
+      const missing = files.filter((f) => !existsSync(f));
       printAbOrchestration({
         docDir,
         kslProjectHome: ws.kslProjectHome,
@@ -168,9 +179,23 @@ export async function cmdFormalize(flags, positional, cwd, wsOptions = {}) {
         runId,
       });
       console.error("");
-      console.error("Livrables KSL absents :");
-      for (const f of missing) console.error(`  - ${f}`);
+      if (missing.length > 0) {
+        console.error("Livrables KSL absents :");
+        for (const f of missing) console.error(`  - ${f}`);
+      } else {
+        console.error("Relance A+B demandée (--force / --refresh / module stub) ; pas de --skip-llm.");
+      }
       return 1;
+    }
+
+    if (flags.ensureLayout && feature.outputPaths.spec) {
+      const layout = ensureLayoutForSpecOutput(
+        ws.kslProjectHome,
+        feature.outputPaths.spec,
+      );
+      if (layout.created) {
+        console.log(`layout: created ${layout.path}`);
+      }
     }
 
     try {
@@ -191,11 +216,11 @@ export async function cmdFormalize(flags, positional, cwd, wsOptions = {}) {
     }
 
     files = kslFilesFromFeature(ws.kslProjectHome, feature);
-    missing = files.filter((f) => !existsSync(f));
-    if (missing.length > 0) {
+    const stillMissing = files.filter((f) => !existsSync(f));
+    if (stillMissing.length > 0) {
       console.error("");
       console.error("KSL encore absents après A+B :");
-      for (const f of missing) console.error(`  - ${f}`);
+      for (const f of stillMissing) console.error(`  - ${f}`);
       return 1;
     }
   }

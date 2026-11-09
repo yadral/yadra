@@ -55,8 +55,34 @@ export function parseFeatureYadraContent(content) {
   };
 }
 
+export function parseRelatedSpecs(content) {
+  const items = [];
+  let inSection = false;
+  for (const line of content.split(/\r?\n/)) {
+    const t = line.trim();
+    if (/^related_specs:\s*$/i.test(t)) {
+      inSection = true;
+      continue;
+    }
+    if (!inSection) continue;
+    const bullet = line.match(/^\s*-\s+(.+?)\s*$/);
+    if (bullet) {
+      items.push(bullet[1].trim());
+      continue;
+    }
+    if (t && !t.startsWith("#") && !/^ksl_levels:/i.test(t) && !/^output_paths:/i.test(t)) {
+      inSection = false;
+    }
+  }
+  return items;
+}
+
 export function loadFeatureYadra(docDir) {
   const path = join(docDir, "feature.yadra.md");
   const content = readFileSync(path, "utf8");
-  return { path, ...parseFeatureYadraContent(content) };
+  return {
+    path,
+    relatedSpecs: parseRelatedSpecs(content),
+    ...parseFeatureYadraContent(content),
+  };
 }

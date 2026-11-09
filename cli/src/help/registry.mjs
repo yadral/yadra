@@ -97,10 +97,13 @@ Entrée obligatoire : <dossier-documents>/feature.yadra.md (au moins un output_p
 
 Si des .ksl manquent (output_paths) : A+B in-process (LLM + SKILLS) puis enchaîne C si écriture OK.
 Si --skip-llm et .ksl manquants : affiche plans/SKILLS, code 1.
-Si tous les .ksl existent : validate (L0+L2+L3, +L1 si --syntax) puis seal (défaut).
+Si tous les .ksl existent (et pas --force / --refresh / module stub) : validate (L0+L2+L3) puis seal (défaut).
 
 Options:
   --seal / --no-seal   Scellement (défaut : --seal)
+  --force              Toujours A+B puis C (régénère même si .ksl présents)
+  --refresh            A+B si aucun sceau T1 sur le livrable principal
+  --no-ensure-layout   Ne crée pas le sibling .module.ksl avant une spec
   --skip-llm           N'appelle pas le LLM ; affiche plans/SKILLS (comportement manuel)
   --syntax             L1 lors de validate/seal
   --include <paths>    Fichiers .ksl extra pour seal
@@ -108,8 +111,9 @@ Options:
   --ksl-project-home, --project-home, --yadra-project-home
   --model, --profile   Modèle / profil pour A · COMPRENDRE`,
     validate: `Usage: yadra validate [PATH] [--syntax] [--layout] [--semantic] [--format human|json] [--project <name>] …`,
-    seal: `Usage: yadra seal [SPEC.spec.ksl] [--syntax] [--include path,...] [--skip-llm] …
+    seal: `Usage: yadra seal [PATH.ksl] [--syntax] [--include path,...] [--skip-llm] …
 
+Livrable : .spec.ksl, .module.ksl ou .project.ksl (L2+L3 par défaut).
 Charge SKILL formalize · C + plan validate avant scellement (--skip-llm : pas de bannière contexte).`,
     plan: `Usage: yadra plan [SPEC.spec.ksl | .] [--format human|json] [--kinds a,b] [--skip-llm] …
 
