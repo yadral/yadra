@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publie une version CLI : bump manifest + package.json, pack, GitHub Release.
 #
-# Usage (depuis la racine du clone yadra/) :
+# Usage :
 #   ./scripts/release-yadra-cli.sh <version> [options]
 #
 # Exemple :
@@ -17,7 +17,12 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [[ -d "$SCRIPT_DIR/../yadra/cli" ]]; then
+  ROOT="$(cd "$SCRIPT_DIR/../yadra" && pwd)"
+else
+  ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 CLI="$ROOT/cli"
 MANIFEST="$ROOT/manifest.mf"
 PKG_JSON="$CLI/package.json"
