@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { findRootProjectInDir } from "./context.mjs";
 import { extractSpecMeta } from "./spec-extract.mjs";
 
@@ -55,6 +55,39 @@ function pascalCase(value) {
     .join("");
 }
 
+/** Segment de package : `momo-cm` → `momocm`. */
+export function toPackageSegment(value) {
+  const cleaned = String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  return cleaned || "feature";
+}
+
+/**
+ * Préfixe de fichier sous PROJECT_HOME.
+ * Un `repo.path` qui contient `..` est résolu depuis le projet service :
+ * s'il désigne PROJECT_HOME, le préfixe est vide (pas de `../../../root` dans les sorties).
+ * Un chemin relatif simple (`services/order-service`) reste un sous-dossier.
+ */
+export function resolveRepoPrefix(repoPath, { serviceDir = null, projectHome = null } = {}) {
+  const raw = String(repoPath ?? "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "");
+  if (!raw) return "";
+  const segments = raw.split("/").filter(Boolean);
+  const escapes = isAbsolute(String(repoPath ?? "")) || segments.includes("..");
+  if (!escapes) return segments.join("/");
+  if (!serviceDir || !projectHome) return "";
+  const resolvedRepo = resolve(serviceDir, raw);
+  const home = resolve(projectHome);
+  if (resolvedRepo === home) return "";
+  const rel = relative(home, resolvedRepo).replaceAll("\\", "/");
+  if (!rel || rel === ".") return "";
+  if (rel.split("/").includes("..") || isAbsolute(rel)) return "";
+  return rel;
+}
+
 function inferEntity(specText, moduleName) {
   if (/\bOrder\b/.test(specText)) return "Order";
   if (/\bCart\b/.test(specText)) return "Cart";
@@ -86,10 +119,15 @@ function inferTechnology(meta, serviceStack) {
   return data;
 }
 
-export function resolveT2Bindings({ kslProjectHome, specPath, specText }) {
+export function resolveT2Bindings({
+  kslProjectHome,
+  specPath,
+  specText,
+  projectHome = null,
+}) {
   const meta = extractSpecMeta(specText);
   const module = meta.module ?? "feature";
-  const feature = module.toLowerCase();
+  const feature = toPackageSegment(module);
   const Feature = pascalCase(module);
   const service = findServiceProjectNearSpec(specPath);
   const root = findRootProjectInDir(kslProjectHome);
@@ -105,12 +143,14 @@ export function resolveT2Bindings({ kslProjectHome, specPath, specText }) {
     data: serviceStack.data?.length ? serviceStack.data : rootStack.data ?? [],
   };
   const Entity = inferEntity(specText, module);
-  const Technology = inferTechnology(meta, stack);
+  const technology = inferTechnology(meta, stack).toLowerCase();
+  const Technology = pascalCase(technology);
   const basePackage = basePackageFromService(service?.text, rootText);
   const ext = sourceExtension(stack.runtime);
-  const repoPrefix = (serviceStack.repoPath ?? "")
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\\/g, "/");
+  const repoPrefix = resolveRepoPrefix(serviceStack.repoPath, {
+    serviceDir: service?.dir ?? null,
+    projectHome,
+  });
   const targetService =
     specText.match(/\btarget_service\s*=\s*"([^"]+)"/)?.[1] ?? null;
 

@@ -156,6 +156,7 @@ export async function cmdExecute(flags, positional, cwd, wsOptions = {}) {
       bindings,
       fileManifest,
       specialization,
+      maxRepairLoops,
     });
     let producedPaths = result.files.map((f) => f.path);
     console.log(`  files: ${result.files.length}`);

@@ -19,6 +19,7 @@ export function buildT2CompileContext(specPath, ws, options = {}) {
     kslProjectHome: ws.kslProjectHome,
     specPath,
     specText,
+    projectHome: ws.projectHome ?? null,
   });
   const fileManifest = buildFileManifest({
     distRoot: root,

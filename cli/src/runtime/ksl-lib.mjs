@@ -19,7 +19,9 @@ export {
   applyBindingTemplate,
   findServiceProjectNearSpec,
   packagePathToFileRel,
+  resolveRepoPrefix,
   resolveT2Bindings,
+  toPackageSegment,
 } from "../../vendor/yadral-dist/ksl/tools/yadra/lib/t2-bindings.mjs";
 export {
   assertManifestCoverage,

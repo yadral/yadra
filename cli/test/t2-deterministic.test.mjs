@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  applyBindingTemplate,
   buildFileManifest,
   buildPlan,
+  packagePathToFileRel,
+  resolveRepoPrefix,
   resolveT2Bindings,
+  toPackageSegment,
 } from "../src/runtime/ksl-lib.mjs";
 import { distRoot } from "../src/runtime/distribution.mjs";
 
@@ -51,4 +56,60 @@ test("buildFileManifest is stable and lists hexagonal paths", () => {
   assert.ok(
     m1.files.some((f) => f.path.includes("CheckoutApi") && f.path.endsWith(".kt")),
   );
+});
+
+test("package segment drops hyphens", () => {
+  assert.equal(toPackageSegment("momo-cm"), "momocm");
+  assert.equal(toPackageSegment("checkout"), "checkout");
+});
+
+test("repo path that is PROJECT_HOME does not prefix output files", () => {
+  const home = mkdtempSync(join(tmpdir(), "yadra-bindings-"));
+  const code = join(home, "root");
+  const serviceDir = join(home, "ksl/services/payments-service");
+  const specDir = join(serviceDir, "modules/momo-cm");
+  try {
+    mkdirSync(specDir, { recursive: true });
+    mkdirSync(code, { recursive: true });
+    writeFileSync(
+      join(home, "ksl/root.project.ksl"),
+      `ksl 1.0\nproject "iyadris-payments" {\n  kind = "root"\n  stack { runtime = "kotlin" data = ["postgres"] }\n}\n`,
+    );
+    writeFileSync(
+      join(serviceDir, "payments-service.project.ksl"),
+      `ksl 1.0\nproject "payments-service" {\n  kind = "service"\n  repo { path = "../../../root" }\n  stack { runtime = "kotlin" data = ["postgres"] }\n}\n`,
+    );
+    const specPath = join(specDir, "momo-cm-request-to-pay.spec.ksl");
+    const specText = `ksl 1.0\nspec "momo-cm-request-to-pay" {\n  module = "momo-cm"\n}\n`;
+    writeFileSync(specPath, specText);
+    assert.equal(
+      resolveRepoPrefix("../../../root", { serviceDir, projectHome: code }),
+      "",
+    );
+    assert.equal(
+      resolveRepoPrefix("services/order-service"),
+      "services/order-service",
+    );
+    const bindings = resolveT2Bindings({
+      kslProjectHome: join(home, "ksl"),
+      specPath,
+      specText,
+      projectHome: code,
+    });
+    assert.equal(bindings.feature, "momocm");
+    assert.equal(bindings.Feature, "MomoCm");
+    assert.equal(bindings.Entity, "MomoCm");
+    assert.equal(bindings.Technology, "Jpa");
+    assert.equal(bindings.repoPrefix, "");
+    const rel = packagePathToFileRel(
+      bindings,
+      applyBindingTemplate("domain.model.<feature>.<Entity>", bindings),
+    );
+    assert.equal(
+      rel,
+      "src/main/java/com/iyadris/paymentsservice/domain/model/momocm/MomoCm.kt",
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });

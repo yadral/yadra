@@ -63,7 +63,10 @@ export function materializeProjectFiles(projectHome, markedFiles, { allowOnly = 
   const prepared = markedFiles.map(({ rel, content }) => {
     const target = safeProjectRelativePath(projectHome, rel);
     if (allowed && !allowed.has(target.rel)) {
-      throw new Error(`T2 B: unexpected output file (not in manifest pass): ${rel}`);
+      const hint = [...allowed].join(", ");
+      throw new Error(
+        `T2 B: unexpected output file (not in manifest pass): ${rel}. Allowed: ${hint}`,
+      );
     }
     const normalized = content.endsWith("\n") ? content : `${content}\n`;
     if (!content.trim()) throw new Error(`T2 B: empty output file: ${rel}`);
@@ -93,6 +96,7 @@ function buildPassPrompt({
   passFiles,
   writtenSummary,
   mandatoryPaths,
+  priorError = "",
 }) {
   return [
     "# T2 · B · PRODUIRE (pass strategy)",
@@ -120,6 +124,14 @@ function buildPassPrompt({
     "## Fichiers déjà produits",
     writtenSummary || "(aucun)",
     "",
+    priorError
+      ? [
+          "## Erreur du pass précédent",
+          priorError,
+          "Corrige la réponse. Produis exactement les chemins autorisés, rien d'autre.",
+          "",
+        ].join("\n")
+      : "",
     "## Contrat B",
     contract,
     "",
@@ -143,6 +155,7 @@ export async function runPhaseBProduce({
   fileManifest,
   specialization,
   distRoot,
+  maxRepairLoops = 0,
   complete = chatCompletion,
 }) {
   const ctx = loadCommandContext(ws, "execute:B");
@@ -167,41 +180,56 @@ export async function runPhaseBProduce({
 
     console.log(`  pass: ${strategy.name} (${passPaths.length} files)`);
 
-    const prompt = buildPassPrompt({
-      spec,
-      contract,
-      skill: ctx.skill.skill,
-      deterministicPlan,
-      bindings,
-      specialization,
-      skeletonText,
-      strategy,
-      passFiles: passPaths,
-      writtenSummary,
-      mandatoryPaths,
-    });
-
-    const raw = await complete({
-      ...llmRuntime(ctx.llm),
-      messages: [
-        { role: "system", content: ctx.skill.system.trim() },
-        { role: "user", content: prompt },
-      ],
-    });
-    const marked = extractMarkedFiles(raw);
-    if (!marked) {
-      throw new Error(
-        `T2 B: invalid LLM response for ${strategy.name}; expected --- FILE: --- blocks.`,
-      );
+    const attempts = Math.max(1, Number(maxRepairLoops) + 1);
+    let priorError = "";
+    let passWritten = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const prompt = buildPassPrompt({
+        spec,
+        contract,
+        skill: ctx.skill.skill,
+        deterministicPlan,
+        bindings,
+        specialization,
+        skeletonText,
+        strategy,
+        passFiles: passPaths,
+        writtenSummary,
+        mandatoryPaths,
+        priorError,
+      });
+      try {
+        const raw = await complete({
+          ...llmRuntime(ctx.llm),
+          messages: [
+            { role: "system", content: ctx.skill.system.trim() },
+            { role: "user", content: prompt },
+          ],
+        });
+        const marked = extractMarkedFiles(raw);
+        if (!marked) {
+          throw new Error(
+            `T2 B: invalid LLM response for ${strategy.name}; expected --- FILE: --- blocks.`,
+          );
+        }
+        passWritten = materializeProjectFiles(ws.projectHome, marked, {
+          allowOnly: passPaths,
+        });
+        const coverageError = assertManifestCoverage(
+          new Set(passWritten.map((f) => f.path)),
+          mandatoryPaths,
+        );
+        if (coverageError) throw new Error(coverageError);
+        break;
+      } catch (error) {
+        const message = error?.message ?? String(error);
+        if (attempt >= attempts) throw error;
+        priorError = message;
+        console.log(
+          `  pass retry ${attempt}/${maxRepairLoops} (${strategy.name}): ${message}`,
+        );
+      }
     }
-    const passWritten = materializeProjectFiles(ws.projectHome, marked, {
-      allowOnly: passPaths,
-    });
-    const coverageError = assertManifestCoverage(
-      new Set(passWritten.map((f) => f.path)),
-      mandatoryPaths,
-    );
-    if (coverageError) throw new Error(coverageError);
     for (const file of passWritten) {
       written.set(file.path, file.sha256);
       allFiles.push(file);
