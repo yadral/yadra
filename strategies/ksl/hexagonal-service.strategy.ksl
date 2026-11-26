@@ -1,0 +1,230 @@
+strategy_skeleton 1.0
+
+strategy "Hexagonal-Service" {
+  id = "hexagonal-service"
+  family = "architecture"
+  implementation_language = "project"
+  reference_profile = "tontine"
+
+  intent {
+    """
+    Cas d'usage exposé comme service en processus. Le port entrant est l'API de
+    domaine, implémentée par le service. Aucun adapter HTTP entrant : l'appelant
+    est un autre service du même processus. Les ports sortants SPI isolent
+    persistence et systèmes externes.
+    """
+  }
+
+  applicability {
+    signals = ["code", "domain", "api", "persistence", "integration"]
+  }
+
+  language_binding {
+    source_language = "project.stack.runtime"
+    execution_model = "project.stack.execution"
+    framework = "project.stack.framework"
+    rule = "Les noms de rôles et les dépendances restent identiques quel que soit le langage."
+  }
+
+  layout {
+    root = "<source-root>/<base-package>"
+
+    package "domain.model.<feature>" {
+      role = "Entités, états et comportement métier."
+    }
+    package "domain.<feature>" {
+      role = "Ports entrants exposant les cas d'usage. Pas de segment api."
+    }
+    package "domain.workflow.api.<feature>" {
+      role = "Services applicatifs implémentant les ports entrants."
+    }
+    package "domain.spi" {
+      role = "Ports sortants : persistence et systèmes externes. Signatures en modèle SPI uniquement."
+    }
+    package "domain.spi.<feature>" {
+      role = "Modèles du port sortant. Aucun import de domain.model, aucune annotation de persistence."
+    }
+    package "domain.validator" {
+      role = "Validations métier appelées avant mutation ou effet externe."
+    }
+    package "domain.converter.<feature>" {
+      role = "Conversion des modèles domaine vers réponses."
+    }
+    package "domain.mapper" {
+      role = "Mapping structurel synchrone et sans orchestration."
+    }
+    package "domain.mapper.<feature>" {
+      role = "Extensions Kotlin .toDomain() : modèle SPI vers modèle domaine. Seul ce package importe les deux."
+    }
+    package "infrastructure.secondary.<technology>" {
+      role = "Adapters sortants implémentant les SPI."
+    }
+    package "infrastructure.secondary.<technology>.repository" {
+      role = "Contrats techniques du framework de persistence."
+    }
+  }
+
+  participants {
+    participant "DomainModel" {
+      path = "domain.model.<feature>.<Entity>"
+      kind = "domain"
+      multiplicity = "one_or_more"
+      responsibility = "Porter l'état et les transitions métier."
+    }
+    participant "InboundApi" {
+      path = "domain.<feature>.<Feature>Api"
+      kind = "input_port"
+      responsibility = "Déclarer les opérations appelées en processus. Signatures en commande de domaine, jamais un DTO REST. Package domain.<feature>, jamais domain.api."
+    }
+    participant "ApplicationService" {
+      path = "domain.workflow.api.<feature>.<Feature>Service"
+      kind = "usecase_implementation"
+      responsibility = "Implémenter InboundApi et orchestrer validation, SPI et conversion."
+    }
+    participant "OutboundSpi" {
+      path = "domain.spi.<Entity>RepositorySpi"
+      kind = "output_port"
+      multiplicity = "one_or_more"
+      responsibility = "Déclarer les besoins sortants avec le modèle SPI uniquement. Aucun type de domain.model dans la signature."
+    }
+    participant "SpiModel" {
+      path = "domain.spi.<feature>.<Entity>Spi"
+      kind = "spi_model"
+      responsibility = "Porter l'état échangé par OutboundSpi. Ne pas importer domain.model ni le mapper."
+    }
+    participant "SpiMapper" {
+      path = "domain.mapper.<feature>.<Entity>SpiMapper"
+      kind = "boundary_mapper"
+      responsibility = "Extensions Kotlin fun <Entity>Spi.toDomain(): <Entity>. Seul fichier autorisé à importer SpiModel et DomainModel ensemble."
+    }
+    participant "SecondaryAdapter" {
+      path = "infrastructure.secondary.<technology>.<Entity>RepositorySpiImpl"
+      kind = "output_adapter"
+      multiplicity = "one_or_more"
+      responsibility = "Implémenter OutboundSpi. Convertir l'entité technique vers SpiModel. Ne pas importer domain.model et ne pas appeler toDomain."
+    }
+    participant "TechnologyRepository" {
+      path = "infrastructure.secondary.<technology>.repository.<Entity><Technology>Repository"
+      kind = "framework_port"
+      responsibility = "Exposer les opérations natives du framework de persistence."
+    }
+    participant "Validator" {
+      path = "domain.validator.<Feature>Validator"
+      kind = "domain_policy"
+      optional = true
+      responsibility = "Valider contexte, ownership, existence et transitions."
+    }
+    participant "ResponseConverter" {
+      path = "domain.converter.<feature>.<Entity>ToResponseConverter"
+      kind = "boundary_mapper"
+      optional = true
+      responsibility = "Produire le résultat de domaine retourné à l'appelant. Pas de DTO REST."
+    }
+  }
+
+  relations {
+    relation "ApplicationService" -> "InboundApi" { type = "implements" }
+    relation "ApplicationService" -> "OutboundSpi" { type = "depends_on" }
+    relation "ApplicationService" -> "SpiMapper" { type = "depends_on" }
+    relation "OutboundSpi" -> "SpiModel" { type = "exposes" }
+    relation "SpiMapper" -> "SpiModel" { type = "reads" }
+    relation "SpiMapper" -> "DomainModel" { type = "produces" }
+    relation "SecondaryAdapter" -> "SpiModel" { type = "returns" }
+    relation "ApplicationService" -> "Validator" { type = "depends_on_optional" }
+    relation "ApplicationService" -> "ResponseConverter" { type = "depends_on_optional" }
+    relation "SecondaryAdapter" -> "OutboundSpi" { type = "implements" }
+    relation "SecondaryAdapter" -> "TechnologyRepository" { type = "delegates_to" }
+    relation "ApplicationService" -> "DomainModel" { type = "orchestrates" }
+  }
+
+  workflow {
+    step 1 { actor = "ApplicationService" action = "Recevoir l'appel en processus sur InboundApi." }
+    step 2 { actor = "ApplicationService" action = "Exécuter Validator si présent." }
+    step 3 { actor = "ApplicationService" action = "Charger ou persister via OutboundSpi, puis SpiMapper.toDomain avant toute transition." }
+    step 4 { actor = "DomainModel" action = "Exécuter la transition métier sur le modèle domaine, jamais sur SpiModel." }
+    step 5 { actor = "ApplicationService" action = "Retourner le résultat de domaine à l'appelant." }
+  }
+
+  generation {
+    required = [
+      "InboundApi",
+      "ApplicationService",
+      "at least one OutboundSpi",
+      "SecondaryAdapter",
+      "TechnologyRepository",
+      "DomainModel",
+      "SpiModel",
+      "SpiMapper"
+    ]
+    optional = ["Validator", "ResponseConverter", "DTO", "Mapper"]
+    naming = [
+      "<Feature>Api",
+      "<Feature>Service",
+      "<Entity>RepositorySpi",
+      "<Entity>RepositorySpiImpl",
+      "<Entity><Technology>Repository",
+      "<Entity>Spi",
+      "<Entity>SpiMapper"
+    ]
+    forbidden = [
+      "Générer un RestController ou un package infrastructure.primary.rest",
+      "InboundApi ou ApplicationService importe un DTO de infrastructure.primary.rest",
+      "ApplicationService dépend d'un repository technique",
+      "SecondaryAdapter implémente un cas d'usage entrant",
+      "Créer un package application distinct du profil Tontine",
+      "Renommer API/SPI/Impl sans demande explicite de la spec",
+      "Placer InboundApi sous domain.api",
+      "SpiModel ou OutboundSpi importe domain.model",
+      "Déclarer toDomain dans le package domain.spi",
+      "SecondaryAdapter importe domain.model"
+    ]
+  }
+
+  tontine_profile {
+    execution_binding = "project"
+    api_result = "project_result single-or-stream when declared by the project"
+    context = "contextual execution when tenant or association is required and supported by the project"
+    dependency_injection = "constructor"
+    annotations = "framework bindings remain at service and adapter boundaries"
+    dto_policy = "InboundApi exposes a domain command. No REST DTO. The caller is another in-process service."
+    persistence_policy = "SpiModel stays free of domain and JPA types. The technical adapter maps to SpiModel. SpiMapper.toDomain produces the domain model."
+  }
+
+  tests {
+    layout = [
+      "test/usecase/<feature>/<Feature>UseCase",
+      "test/tester/<Feature>ServiceTester",
+      "test/tester/unit/<feature>/<Feature>ServiceUnitTester",
+      "test/tester/integration/<feature>/<Feature>ServiceIntegrationTester",
+      "test/suite/<feature>/<Feature>UseCaseUT",
+      "test/suite/<feature>/<Feature>UseCaseIT",
+      "test/infrastructure/secondary/repository/<feature>/InMemory<Entity>RepositorySpiImpl",
+      "test/testutil/fluent/<feature>/<Feature>TesterResult",
+      "test/testutil/builder/<Dto>TestBuilder"
+    ]
+    assertion "dependency-direction" {
+      verifies = "Caller → API ← Service → SPI ← Secondary. No primary REST adapter."
+    }
+    assertion "substitution" {
+      verifies = "In-memory SPI implementations replace secondary adapters in unit tests."
+    }
+  }
+
+  composition {
+    required_with = ["Populator/Converter"]
+    compatible = ["Validator", "FluentCaseTest", "TransactionalOutbox"]
+  }
+
+  examples {
+    java {
+      """
+// Hexagonal-Service : pas de RestController. L'appelant est un service du même processus.
+// domain.<feature>.<Feature>Api — commande de domaine, aucun import infrastructure.primary.rest
+// domain.workflow.api.<feature>.<Feature>Service implements <Feature>Api
+// domain.spi.<Entity>RepositorySpi + domain.spi.<feature>.<Entity>Spi
+// domain.mapper.<feature>.<Entity>SpiMapper — fun <Entity>Spi.toDomain(): <Entity>
+// infrastructure.secondary.<technology>.<Entity>RepositorySpiImpl
+      """
+    }
+  }
+}

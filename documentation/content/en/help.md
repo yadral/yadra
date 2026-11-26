@@ -46,7 +46,10 @@ Timeline 1 (T1):
   seal         T1 seal (.yadra/sealed/)
 
 Timeline 2 (T2):
-  plan         Compile plan from a spec (.spec.ksl) — dry-run
+  plan         Compile plan from a spec (.spec.ksl) — T2 · A
+  execute      Materialize under PROJECT_HOME — T2 · B
+  gate         Conformance Gate — T2 · C
+  make         One command: T1 (formalize) → T2 (execute + gate)
   strategies   Internal strategy name catalog (list / show)
 
 Run "yadra <command> -h" for details.
@@ -60,7 +63,7 @@ yadra project -h
 
 `yadra project -h` lists every subcommand (`list`, `add`, `update`, `set-profile`, `use`, …), options, `--project` / env overrides, and a **multi-project workflow example**.
 
-Full reference: [`yadra project`](/docs/en/project/). Timeline 2: [`yadra plan`](/docs/en/plan/), [`yadra strategies`](/docs/en/strategies/).
+Full reference: [`yadra project`](/docs/en/project/). Daily path: [`yadra make`](/docs/en/make/). Timeline 2: [`yadra plan`](/docs/en/plan/), [`yadra execute`](/docs/en/execute/), [`yadra strategies`](/docs/en/strategies/).
 
 ## Exit Code Behavior
 

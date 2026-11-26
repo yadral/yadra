@@ -1,19 +1,19 @@
 import { createHash } from "node:crypto";
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { chatCompletion } from "../llm/chat.mjs";
-import {
-  loadCommandContext,
-  llmRuntime,
-  logCommandContext,
-} from "../command-context.mjs";
-import { extractMarkedFiles } from "../formalize/parse-llm-files.mjs";
+import { loadCommandContext, llmRuntime } from "../command-context.mjs";
+import { assertDistinctJvmSignatures, extractMarkedFiles } from "../formalize/parse-llm-files.mjs";
+import { logWrittenFiles } from "../../util/log.mjs";
+import { claimOwner, loadOwners, saveOwners } from "./file-owners.mjs";
+import { pathCited } from "./sandbox-errors.mjs";
 import {
   assertManifestCoverage,
   manifestForStrategy,
@@ -28,7 +28,7 @@ export function safeProjectRelativePath(projectHome, candidate) {
   if (!rel || isAbsolute(rel) || rel.includes("\0")) {
     throw new Error(`T2 B: invalid output path: ${candidate}`);
   }
-  const segments = rel.split("/");
+  let segments = rel.split("/");
   if (
     segments.some((part) => part === ".." || part === "." || part === "") ||
     segments.some((part) => part === ".git" || part === ".yadra")
@@ -36,6 +36,11 @@ export function safeProjectRelativePath(projectHome, candidate) {
     throw new Error(`T2 B: forbidden output path: ${candidate}`);
   }
   const root = resolve(projectHome);
+  const base = basename(root);
+  while (base && segments[0] === base && segments.length > 1) segments.shift();
+  if (segments.length === 0) {
+    throw new Error(`T2 B: invalid output path: ${candidate}`);
+  }
   const absolute = resolve(root, ...segments);
   const fromRoot = relative(root, absolute);
   if (fromRoot.startsWith(`..${sep}`) || fromRoot === ".." || isAbsolute(fromRoot)) {
@@ -55,19 +60,16 @@ function atomicWrite(path, content) {
   }
 }
 
-export function materializeProjectFiles(projectHome, markedFiles, { allowOnly = null } = {}) {
+export function materializeProjectFiles(projectHome, markedFiles, options = {}) {
   if (!markedFiles?.length) {
     throw new Error("T2 B: no FILE blocks returned by the LLM.");
   }
-  const allowed = allowOnly ? new Set(allowOnly) : null;
+  const specId = options.specId ?? "";
+  const mode = options.mode ?? "produce";
+  const errorPaths = options.errorPaths ?? [];
+  const owners = options.owners ?? loadOwners(projectHome);
   const prepared = markedFiles.map(({ rel, content }) => {
     const target = safeProjectRelativePath(projectHome, rel);
-    if (allowed && !allowed.has(target.rel)) {
-      const hint = [...allowed].join(", ");
-      throw new Error(
-        `T2 B: unexpected output file (not in manifest pass): ${rel}. Allowed: ${hint}`,
-      );
-    }
     const normalized = content.endsWith("\n") ? content : `${content}\n`;
     if (!content.trim()) throw new Error(`T2 B: empty output file: ${rel}`);
     return { ...target, content: normalized };
@@ -77,74 +79,183 @@ export function materializeProjectFiles(projectHome, markedFiles, { allowOnly = 
     if (seen.has(file.rel)) throw new Error(`T2 B: duplicate output file: ${file.rel}`);
     seen.add(file.rel);
   }
-  for (const file of prepared) atomicWrite(file.absolute, file.content);
-  return prepared.map((file) => ({
-    path: file.rel,
-    sha256: sha256(file.content),
-  }));
+  const written = [];
+  let claimed = false;
+  for (const file of prepared) {
+    const owner = owners[file.rel];
+    const foreign = owner && specId && owner !== specId && existsSync(file.absolute);
+    const repairTarget = mode === "repair" && pathCited(file.rel, errorPaths);
+    if (foreign && !repairTarget && !options.allowMerge) {
+      if (options.verbose) console.log(`inchangé ${file.rel} (${owner})`);
+      continue;
+    }
+    assertDistinctJvmSignatures(file.rel, file.content);
+    atomicWrite(file.absolute, file.content);
+    if (claimOwner(owners, specId, file.rel)) claimed = true;
+    written.push({ path: file.rel, sha256: sha256(file.content) });
+  }
+  if (claimed && specId) saveOwners(projectHome, owners);
+  return written;
+}
+
+function skeletonForPrompt(text) {
+  const cut = text.search(/\n\s*examples\s*\{/);
+  return (cut === -1 ? text : text.slice(0, cut)).trim();
+}
+
+function compactBindings(bindings) {
+  return {
+    basePackage: bindings.basePackage,
+    feature: bindings.feature,
+    Feature: bindings.Feature,
+    Entity: bindings.Entity,
+    ext: bindings.ext,
+    stack: bindings.stack,
+  };
+}
+
+function ownershipLine(allowMerge) {
+  return allowMerge
+    ? "Tu peux mettre à jour un fichier déjà écrit par une spec du même module (merge)."
+    : "Un fichier déjà écrit par une autre spec est laissé tel quel.";
 }
 
 function buildPassPrompt({
   spec,
-  contract,
-  skill,
-  deterministicPlan,
   bindings,
-  specialization,
   skeletonText,
   strategy,
   passFiles,
-  writtenSummary,
   mandatoryPaths,
   priorError = "",
+  allowMerge = false,
 }) {
   return [
-    "# T2 · B · PRODUIRE (pass strategy)",
+    `# ${strategy.name}`,
     "",
-    `## Strategy courante: ${strategy.name} (${strategy.id})`,
+    "## Bindings",
+    JSON.stringify(compactBindings(bindings)),
     "",
-    "## Bindings résolus (non négociables)",
-    JSON.stringify(bindings, null, 2),
-    "",
-    "## Spécialisation T2 · A",
-    specialization,
-    "",
-    "## Plan déterministe",
-    JSON.stringify(deterministicPlan, null, 2),
-    "",
-    "## Spec KSL scellée",
+    "## Spec",
     spec,
     "",
-    "## Squelette actif",
-    skeletonText,
+    "## Squelette",
+    skeletonForPrompt(skeletonText),
     "",
     "## Fichiers obligatoires pour ce pass",
     mandatoryPaths.map((p) => `- ${p}`).join("\n") || "(aucun)",
     "",
-    "## Fichiers déjà produits",
-    writtenSummary || "(aucun)",
+    priorError ? `## Erreur\n${priorError}\n` : "",
+    "## Réponse",
+    "Blocs `--- FILE: <chemin relatif à PROJECT_HOME> ---` seulement.",
+    "Le corps est le source seul : pas de ```, pas de phrase, pas de note après le code.",
+    "Écris les fichiers obligatoires. Un fichier nouveau en plus est accepté.",
+    ownershipLine(allowMerge),
+    passFiles.length ? `Suggérés: ${passFiles.join(", ")}` : "",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+function buildCombinedPrompt({
+  spec,
+  bindings,
+  strategyBlocks,
+  passFiles,
+  mandatoryPaths,
+  priorError = "",
+  allowMerge = false,
+}) {
+  return [
+    "# Slice unique — toutes les strategies en contraintes",
     "",
-    priorError
-      ? [
-          "## Erreur du pass précédent",
-          priorError,
-          "Corrige la réponse. Produis exactement les chemins autorisés, rien d'autre.",
-          "",
-        ].join("\n")
-      : "",
-    "## Contrat B",
-    contract,
+    "## Bindings",
+    JSON.stringify(compactBindings(bindings)),
     "",
-    "## SKILL B",
-    skill,
+    "## Spec",
+    spec,
     "",
-    "## Réponse obligatoire",
-    "- Uniquement des blocs `--- FILE: <chemin relatif à PROJECT_HOME> ---`.",
-    `- Produis **tous** les fichiers obligatoires listés ci-dessus (exactement ces chemins).`,
-    `- Tu peux produire au plus ces fichiers pour ce pass: ${passFiles.join(", ") || "(liste vide)"}`,
-    "- Respecte basePackage, stack et la spécialisation A.",
-    "- Contenu complet ; aucun commentaire hors blocs.",
-  ].join("\n");
+    "## Strategies",
+    strategyBlocks.join("\n\n"),
+    "",
+    "## Fichiers obligatoires pour ce pass",
+    mandatoryPaths.map((p) => `- ${p}`).join("\n") || "(aucun)",
+    "",
+    priorError ? `## Erreur\n${priorError}\n` : "",
+    "## Réponse",
+    "Blocs `--- FILE: <chemin relatif à PROJECT_HOME> ---` seulement.",
+    "Le corps est le source seul : pas de ```, pas de phrase, pas de note après le code.",
+    "Écris les fichiers obligatoires. Un fichier nouveau en plus est accepté.",
+    ownershipLine(allowMerge),
+    passFiles.length ? `Suggérés: ${passFiles.join(", ")}` : "",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+function optionsSpecId(specPath) {
+  return String(specPath ?? "").replaceAll("\\", "/");
+}
+
+async function produceOnePass({
+  ws,
+  ctx,
+  spec,
+  specId,
+  owners,
+  bindings,
+  prompt,
+  label,
+  mandatoryPaths,
+  maxRepairLoops,
+  complete,
+  allowMerge,
+  verbose = false,
+}) {
+  const attempts = Math.max(1, Number(maxRepairLoops) + 1);
+  let priorError = "";
+  let passWritten = [];
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const body = priorError ? `${prompt}\n\n## Erreur\n${priorError}\n` : prompt;
+    try {
+      const raw = await complete({
+        ...llmRuntime(ctx.llm),
+        messages: [
+          { role: "system", content: ctx.skill.system.trim() },
+          { role: "user", content: body },
+        ],
+      });
+      const marked = extractMarkedFiles(raw);
+      if (!marked) {
+        throw new Error(`réponse sans blocs FILE (${label})`);
+      }
+      passWritten = materializeProjectFiles(ws.projectHome, marked, {
+        specId,
+        owners,
+        mode: "produce",
+        allowMerge,
+        verbose,
+      });
+      logWrittenFiles(verbose, passWritten);
+      const covered = new Set(passWritten.map((f) => f.path));
+      for (const path of mandatoryPaths) {
+        if (covered.has(path)) continue;
+        const owner = owners[path];
+        if (owner && owner !== specId && existsSync(join(ws.projectHome, path))) {
+          covered.add(path);
+        }
+      }
+      const coverageError = assertManifestCoverage(covered, mandatoryPaths);
+      if (coverageError) throw new Error(coverageError);
+      return passWritten;
+    } catch (error) {
+      priorError = error?.message ?? String(error);
+      if (attempt >= attempts) {
+        throw new Error(priorError);
+      }
+    }
+  }
+  return passWritten;
 }
 
 export async function runPhaseBProduce({
@@ -157,87 +268,107 @@ export async function runPhaseBProduce({
   distRoot,
   maxRepairLoops = 0,
   complete = chatCompletion,
+  combined = false,
+  allowMerge = false,
+  verbose = false,
 }) {
   const ctx = loadCommandContext(ws, "execute:B");
-  console.log("T2 execute — B · PRODUIRE (LLM + SKILL, multi-pass)");
-  logCommandContext(ctx);
   const spec = readFileSync(specPath, "utf8");
-  const contract = readFileSync(ctx.plan.path, "utf8");
-  const written = new Map();
+  const specId = optionsSpecId(specPath);
+  const owners = loadOwners(ws.projectHome);
   const allFiles = [];
 
-  for (const strategy of deterministicPlan.strategies) {
-    if (!strategy.skeleton || !strategy.id) continue;
+  const active = deterministicPlan.strategies.filter(
+    (strategy) => strategy.skeleton && strategy.id,
+  );
+
+  if (combined && active.length > 0) {
+    const strategyBlocks = [];
+    const mandatory = [];
+    const suggested = [];
+    for (const strategy of active) {
+      const passManifest = manifestForStrategy(fileManifest, strategy.id);
+      if (passManifest.length === 0) continue;
+      const skeletonPath = join(ctx.root, "yadra/strategies", strategy.skeleton);
+      const skeletonText = existsSync(skeletonPath)
+        ? readFileSync(skeletonPath, "utf8")
+        : "";
+      strategyBlocks.push(
+        [`### ${strategy.name}`, skeletonForPrompt(skeletonText)].join("\n"),
+      );
+      for (const item of passManifest) {
+        suggested.push(item.path);
+        if (item.required && !item.path.includes("<") && !item.path.includes(">")) {
+          mandatory.push(item.path);
+        }
+      }
+    }
+    if (strategyBlocks.length === 0) {
+      // fall through to per-strategy passes
+    } else {
+    const mandatoryPaths = [...new Set(mandatory)];
+    const passFiles = [...new Set(suggested)];
+    const prompt = buildCombinedPrompt({
+      spec,
+      bindings,
+      strategyBlocks,
+      passFiles,
+      mandatoryPaths,
+      allowMerge,
+    });
+    const written = await produceOnePass({
+      ws,
+      ctx,
+      spec,
+      specId,
+      owners,
+      bindings,
+      prompt,
+      label: "slice",
+      mandatoryPaths,
+      maxRepairLoops,
+      complete,
+      allowMerge,
+      verbose,
+    });
+    return { files: written };
+    }
+  }
+
+  for (const strategy of active) {
     const passManifest = manifestForStrategy(fileManifest, strategy.id);
     if (passManifest.length === 0) continue;
     const skeletonPath = join(ctx.root, "yadra/strategies", strategy.skeleton);
     const skeletonText = readFileSync(skeletonPath, "utf8");
-    const mandatoryPaths = passManifest.filter((f) => f.required).map((f) => f.path);
+    const mandatoryPaths = passManifest
+      .filter((f) => f.required && !f.path.includes("<") && !f.path.includes(">"))
+      .map((f) => f.path);
     const passPaths = passManifest.map((f) => f.path);
-    const writtenSummary = [...written.entries()]
-      .map(([path, sha]) => `- ${path} (${sha.slice(0, 12)}…)`)
-      .join("\n");
-
-    console.log(`  pass: ${strategy.name} (${passPaths.length} files)`);
-
-    const attempts = Math.max(1, Number(maxRepairLoops) + 1);
-    let priorError = "";
-    let passWritten = null;
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      const prompt = buildPassPrompt({
-        spec,
-        contract,
-        skill: ctx.skill.skill,
-        deterministicPlan,
-        bindings,
-        specialization,
-        skeletonText,
-        strategy,
-        passFiles: passPaths,
-        writtenSummary,
-        mandatoryPaths,
-        priorError,
-      });
-      try {
-        const raw = await complete({
-          ...llmRuntime(ctx.llm),
-          messages: [
-            { role: "system", content: ctx.skill.system.trim() },
-            { role: "user", content: prompt },
-          ],
-        });
-        const marked = extractMarkedFiles(raw);
-        if (!marked) {
-          throw new Error(
-            `T2 B: invalid LLM response for ${strategy.name}; expected --- FILE: --- blocks.`,
-          );
-        }
-        passWritten = materializeProjectFiles(ws.projectHome, marked, {
-          allowOnly: passPaths,
-        });
-        const coverageError = assertManifestCoverage(
-          new Set(passWritten.map((f) => f.path)),
-          mandatoryPaths,
-        );
-        if (coverageError) throw new Error(coverageError);
-        break;
-      } catch (error) {
-        const message = error?.message ?? String(error);
-        if (attempt >= attempts) throw error;
-        priorError = message;
-        console.log(
-          `  pass retry ${attempt}/${maxRepairLoops} (${strategy.name}): ${message}`,
-        );
-      }
-    }
-    for (const file of passWritten) {
-      written.set(file.path, file.sha256);
-      allFiles.push(file);
-    }
-  }
-
-  if (allFiles.length === 0) {
-    throw new Error("T2 B: no files produced (empty file manifest?).");
+    const prompt = buildPassPrompt({
+      spec,
+      bindings,
+      skeletonText,
+      strategy,
+      passFiles: passPaths,
+      mandatoryPaths,
+      allowMerge,
+    });
+    const passWritten = await produceOnePass({
+      ws,
+      ctx,
+      spec,
+      specId,
+      owners,
+      bindings,
+      prompt,
+      label: strategy.name,
+      mandatoryPaths,
+      maxRepairLoops,
+      complete,
+      allowMerge,
+      verbose,
+    });
+    allFiles.push(...passWritten);
   }
 
   return { files: allFiles };

@@ -40,6 +40,13 @@ export function parseArgs(argv) {
     force: false,
     refresh: false,
     ensureLayout: true,
+    combined: false,
+    merge: false,
+    noCombined: false,
+    noMerge: false,
+    noGate: false,
+    step: "all",
+    verbose: false,
   };
   const positional = [];
   const provided = new Set();
@@ -63,6 +70,7 @@ export function parseArgs(argv) {
     "--role": "role",
     "--section": "section",
     "--prompt": "prompt",
+    "--step": "step",
   };
 
   function readValue(flag, inlineValue, index) {
@@ -82,7 +90,7 @@ export function parseArgs(argv) {
       return { error: `Flag does not take a value: ${a}`, flags, positional, provided };
     }
 
-    if (a.startsWith("-")) provided.add(a);
+    if (a.startsWith("-")) provided.add(a === "-v" ? "--verbose" : a);
 
     if (a === "--help" || a === "-h") flags.help = true;
     else if (a === "--syntax") flags.syntax = true;
@@ -108,6 +116,12 @@ export function parseArgs(argv) {
     else if (a === "--force") flags.force = true;
     else if (a === "--refresh") flags.refresh = true;
     else if (a === "--no-ensure-layout") flags.ensureLayout = false;
+    else if (a === "--combined") flags.combined = true;
+    else if (a === "--merge") flags.merge = true;
+    else if (a === "--no-combined") flags.noCombined = true;
+    else if (a === "--no-merge") flags.noMerge = true;
+    else if (a === "--no-gate") flags.noGate = true;
+    else if (a === "--verbose" || a === "-v") flags.verbose = true;
     else if (valueFlags[a]) {
       const parsed = readValue(a, inlineValue, i);
       if (parsed.error) {

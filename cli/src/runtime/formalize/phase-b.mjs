@@ -7,19 +7,21 @@ import {
   logCommandContext,
 } from "../command-context.mjs";
 import { extractMarkedFiles } from "./parse-llm-files.mjs";
+import { logVerbose, logWrittenFiles } from "../../util/log.mjs";
 
 export async function runPhaseBProduire({
   ws,
   compactPath,
   outputPaths,
+  verbose = false,
 }) {
   const ctx = loadCommandContext(ws, "formalize:B");
   const compact = readFileSync(compactPath, "utf8");
   const planText = readFileSync(ctx.plan.path, "utf8");
 
   console.log("T1 formalize — B · PRODUIRE (LLM + SKILL)");
-  logCommandContext(ctx);
-  console.log(`  compact: ${compactPath}`);
+  logCommandContext(ctx, verbose);
+  logVerbose(verbose, `  compact: ${compactPath}`);
   console.log("  calling LLM…");
 
   const user = [
@@ -67,8 +69,6 @@ export async function runPhaseBProduire({
     written.push(abs);
   }
 
-  console.log("");
-  console.log("Fichiers KSL écrits :");
-  for (const f of written) console.log(`  ${f}`);
+  logWrittenFiles(verbose, written);
   return { written };
 }

@@ -183,7 +183,8 @@ export function loadCommandContext(ws, bindingKey) {
   };
 }
 
-export function logCommandContext(ctx) {
+export function logCommandContext(ctx, verbose = false) {
+  if (!verbose) return;
   console.log(
     `  [${ctx.binding.timeline}] plan (${ctx.plan.tier}): ${ctx.plan.path}`,
   );

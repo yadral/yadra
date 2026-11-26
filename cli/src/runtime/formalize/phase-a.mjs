@@ -18,6 +18,7 @@ import {
   readNeighborKslSnippets,
   buildComprendreMessages,
 } from "./build-comprendre-prompt.mjs";
+import { logVerbose } from "../../util/log.mjs";
 import { extractSingleCompact } from "./parse-llm-files.mjs";
 import { primaryDeliverablePath } from "../../util/feature-yadra.mjs";
 
@@ -31,6 +32,7 @@ export async function runPhaseAComprendre({
   feature,
   tmpDir,
   compactFileName = "feature.compact.ksl",
+  verbose = false,
 }) {
   const ctx = loadCommandContext(ws, "formalize:A");
   const docCorpus = collectDocCorpus(docDir);
@@ -72,9 +74,9 @@ export async function runPhaseAComprendre({
   });
 
   console.log("T1 formalize — A · COMPRENDRE (LLM + SKILL)");
-  logCommandContext(ctx);
-  console.log(`  kinds:   ${kinds.join(", ")}`);
-  console.log(`  catalog suggestions: ${suggested.length}`);
+  logCommandContext(ctx, verbose);
+  logVerbose(verbose, `  kinds:   ${kinds.join(", ")}`);
+  logVerbose(verbose, `  catalog suggestions: ${suggested.length}`);
   console.log("  calling LLM…");
 
   const llm = llmRuntime(ctx.llm);
@@ -111,7 +113,6 @@ export async function runPhaseAComprendre({
   }
   writeFileSync(compactPath, `${compact}\n`, "utf8");
 
-  console.log("");
-  console.log(`Compact écrit : ${compactPath}`);
+  logVerbose(verbose, `Compact écrit : ${compactPath}`);
   return { compactPath, suggestedCount: suggested.length };
 }

@@ -45,8 +45,8 @@ function kslFilesFromFeature(kslRoot, feature) {
 function runPhaseC(flags, cwd, ws, feature, files) {
   const ctx = loadCommandContext(ws, "formalize:C");
   console.log("T1 formalize — C · LIVRER (validate / seal)");
-  logCommandContext(ctx);
-  console.log("");
+  logCommandContext(ctx, flags.verbose);
+  if (flags.verbose) console.log("");
 
   const validateOpts = {
     syntax: flags.syntax,
@@ -56,7 +56,7 @@ function runPhaseC(flags, cwd, ws, feature, files) {
   };
 
   for (const file of files) {
-    console.log(`validate ${file}`);
+    if (flags.verbose) console.log(`validate ${file}`);
     const r = runValidate(file, validateOpts);
     if (r.exitCode !== 0) return r.exitCode;
   }
@@ -105,10 +105,11 @@ export async function cmdFormalize(flags, positional, cwd, wsOptions = {}) {
     return 2;
   }
 
-  syncKslToolEnv(cwd, wsOptions);
+  const wsOpts = { ...wsOptions, seedPath: positional[0] ?? "." };
+  syncKslToolEnv(cwd, wsOpts);
   let ws;
   try {
-    ws = requireKslProjectHome(cwd, wsOptions);
+    ws = requireKslProjectHome(cwd, wsOpts);
   } catch (e) {
     console.error(e.message);
     return 2;
@@ -204,11 +205,13 @@ export async function cmdFormalize(flags, positional, cwd, wsOptions = {}) {
         ws,
         feature,
         tmpDir,
+        verbose: flags.verbose,
       });
       await runPhaseBProduire({
         ws,
         compactPath,
         outputPaths: feature.outputPaths,
+        verbose: flags.verbose,
       });
     } catch (e) {
       console.error(e.message ?? e);

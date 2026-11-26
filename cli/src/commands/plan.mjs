@@ -16,10 +16,11 @@ export async function cmdPlan(flags, positional, cwd, wsOptions = {}) {
     console.error("--format must be human or json.");
     return 2;
   }
-  syncKslToolEnv(cwd, wsOptions);
+  const wsOpts = { ...wsOptions, seedPath: positional[0] ?? "." };
+  syncKslToolEnv(cwd, wsOpts);
   let ws;
   try {
-    ws = requireKslProjectHome(cwd, wsOptions);
+    ws = requireKslProjectHome(cwd, wsOpts);
   } catch (e) {
     console.error(e.message);
     return 2;

@@ -3,8 +3,8 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "0.1.13",
-  "description": "Yadra CLI — T1 formalize/validate/seal, T2 plan/execute/gate/strategies, project",
+  "version": "0.1.15",
+  "description": "Yadra CLI — T1 formalize/validate/seal, T2 plan/execute/gate/make/strategies, project",
   "type": "module",
   "bin": {
     "yadra": "./src/main.mjs"

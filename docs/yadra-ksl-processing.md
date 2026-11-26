@@ -5,7 +5,7 @@
 Ce document décrit **le comportement de Yadra**. Il ne fait **pas** partie de la grammaire KSL : l’auteur écrit `project` / `module` / `spec` ; Yadra interprète.
 
 Référence langage : [`ksl-language-spec.md`](ksl-language-spec.md).  
-CLI : [`yadra-cli.md`](yadra-cli.md) (`yadra validate`, `yadra execute`, `yadra gate`).
+CLI : [`yadra-cli.md`](yadra-cli.md) (`yadra make`, `yadra validate`, `yadra execute`, `yadra gate`).
 
 ---
 
@@ -95,7 +95,9 @@ Le SKILL **formalize** (parties A/B/C) vit dans le **registre SKILLS du projet c
 
 **`yadra gate`** : kinds **`phase.gate`** — CLI packagé **0.1.8+** (Conformance Gate + `--produce` docs/e2e).
 
-CLI packagé **0.1.2+** : **`yadra plan`**. **0.1.3+** : **`yadra strategies`**. **0.1.5+** : **`yadra execute`** (T2 · B).
+**`yadra make` (CLI 0.1.14+)** : chemin quotidien — découvre les `feature.yadra.md`, enchaîne T1 `formalize` puis T2 `execute` + `gate`. KSL reste l’IR. Doc : site [`make`](../documentation/content/fr/make.md).
+
+CLI packagé **0.1.2+** : **`yadra plan`**. **0.1.3+** : **`yadra strategies`**. **0.1.5+** : **`yadra execute`** (T2 · B). **0.1.14+** : **`yadra make`**.
 
 **Phase C · LIVRER** : SKILL + plans ; T2 **`gate --produce`** (IA opt.). **Oracle Conformance Gate** (verdict **sans** LLM) :  
 `KSL scellé × (artefacts + preuves) ⟹ SATISFIED | VIOLATED | UNDECIDABLE`

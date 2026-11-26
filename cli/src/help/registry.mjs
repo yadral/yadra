@@ -23,10 +23,12 @@ Timeline 2 (T2):
   plan         Plan de compilation depuis une spec (.spec.ksl) — T2 · A
   execute      Matérialisation sous PROJECT_HOME — T2 · B
   gate         Conformance Gate — T2 · C · LIVRER (phase.gate)
+  make         Une commande : T1 (formalize) → T2 (execute + gate)
   strategies   Catalogue (list / show / explain)
 
 Règle (T1/T2 sauf validate) : LLM yadra configure + SKILL + plan validate (fallback draft v1).
   --skip-llm   Désactive l'agent (extract regex / validate-seal seul).
+  --verbose    Chemins fichier, SKILL/plan, graphe make détaillé.
 
 Exécutez "yadra <commande> -h" pour le détail.`;
 }
@@ -105,6 +107,7 @@ Options:
   --refresh            A+B si aucun sceau T1 sur le livrable principal
   --no-ensure-layout   Ne crée pas le sibling .module.ksl avant une spec
   --skip-llm           N'appelle pas le LLM ; affiche plans/SKILLS (comportement manuel)
+  --verbose / -v       SKILL/plan, chemins validate, compact
   --syntax             L1 lors de validate/seal
   --include <paths>    Fichiers .ksl extra pour seal
   --project <name>     Projet enregistré (one-shot)
@@ -125,7 +128,7 @@ T2 · A · COMPRENDRE : LLM + SKILL execute/partie-a-comprendre + plan validate 
 Prérequis : yadra configure + credentials. validate/seal recommandés avant T2 réelle.`,
     execute: `Usage: yadra execute [SPEC.spec.ksl | .] [--kinds a,b] [--dry-run] [--allow-unsealed] [--skip-llm] [--no-verify] …
 
-T2 · execute : LLM utilisateur (configure) + plan + SKILLS + strategy.ksl → code sous PROJECT_HOME (stack KSL) ; sandbox Gradle + repair (budget).
+T2 · execute : LLM utilisateur (configure) + plan + SKILLS + strategy.ksl → code sous PROJECT_HOME (stack KSL) ; sandbox gradle/maven test + repair (budget).
 
 Prérequis :
   - yadra project use <name> avec --project-home (PROJECT_HOME requis)
@@ -135,11 +138,45 @@ Prérequis :
 Options :
   --kinds code,tests   Sous-ensemble de outputs.phase.execute uniquement
   --dry-run            Plan + phase ; aucune écriture (--skip-llm autorisé)
-  --no-verify          PRODUIRE sans gradle test / repair
+  --no-verify          PRODUIRE sans sandbox test / repair
   --allow-unsealed     Dev local sans seal frais
+  --combined           Un pass LLM (strategies = contraintes), pas un pass par strategy
+  --merge              Autorise l'écriture sur un fichier déjà possédé par une autre spec
+  --verbose / -v       Liste chaque fichier écrit (défaut : un compteur)
   --skip-llm           Uniquement avec --dry-run
 
 Kinds outputs.phase.gate (docs, e2e) → yadra gate. Sorties : stdout + PROJECT_HOME + .yadra/bundles/.`,
+    make: `Usage: yadra make [PATH] [options]
+
+Chemin quotidien : une commande, du Doc First au code.
+PATH = dossier (prompts/… ou .), feature.yadra.md, ou .spec.ksl.
+KSL reste l'IR (validate / seal) — plus besoin de l'écrire ou d'enchaîner formalize/plan/execute/gate.
+
+Découvre les feature.yadra.md, formalize (T1), puis execute + gate (T2) dans l'ordre
+root → service → specs → module. Execute en slice unique (--combined) avec merge d'ownership.
+
+Workspace : auto-détecté depuis PATH/cwd (root.project.ksl ou dossier ksl/ + repo.path).
+Overrides : --project, --ksl-project-home, --project-home. LLM sauf --dry-run --skip-llm.
+
+Options:
+  --step all|t1|t2|execute|gate   Sous-ensemble (défaut all)
+  --dry-run                       Graphe + execute/gate dry-run ; pas d'écriture T1
+  --skip-llm                      Uniquement avec --dry-run
+  --format json                   Graphe machine (avec --dry-run : s'arrête là)
+  --no-gate                       Pas de yadra gate
+  --no-combined                   Un pass LLM par strategy (comportement execute historique)
+  --no-merge                      Ne pas écraser un fichier possédé par une autre spec
+  --force                         Relance T1 A+B et T2 même si le sceau/execute est frais
+  --verbose / -v                  Graphe détaillé + chemins fichier + SKILL/plan
+  --no-verify                     Execute sans sandbox
+  --allow-unsealed                T2 sans seal T1
+  --refresh / --no-seal / --kinds / --project / --profile / --model
+
+Exemples:
+  yadra make prompts/momo-cm/
+  yadra make /abs/path/to/prompts/momo-cm/ --dry-run --skip-llm
+  yadra make prompts/momo-cm/specs/request-to-pay/ --step t2
+  yadra make . --project iyadris-payments   # override explicite`,
     gate: `Usage: yadra gate [SPEC.spec.ksl | .] [--format human|json] [--kinds a,b] [--dry-run]
               [--allow-unsealed] [--allow-no-execute] [--produce] [--skip-llm] …
 

@@ -115,6 +115,9 @@ flowchart TB
 ### Flux recommandé
 
 ```bash
+yadra make prompts/ma-feature/                    # quotidien (T1 + T2)
+
+# Mode expert :
 yadra seal feature.spec.ksl
 yadra plan feature.spec.ksl --skip-llm          # A · COMPRENDRE (preview)
 yadra execute feature.spec.ksl                    # B · PRODUIRE (+ boucle)

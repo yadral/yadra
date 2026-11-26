@@ -9,6 +9,7 @@ le bloc **`examples { java { """…""" } }`** donne une **forme Java illustrativ
 ### Profils projet (Tontine)
 
 - `hexagonal.strategy.ksl` — exemple Java **order-checkout** (API/SPI/REST/JPA, chemins packages Tontine)
+- `hexagonal-service.strategy.ksl` — même cœur, **sans** `RestController` : service appelé en processus
 - `validator.strategy.ksl` — `CheckoutRequest` (DTO REST) + `CheckoutValidator` ; lié usecase insufficient-stock
 - `populator-converter.strategy.ksl` — `Order` → `OrderResponse` (Mapper, Resolver, Populator, Converter)
 - `fluent-case-test.strategy.ksl` — exemple **UseCase / Tester / UT·IT / InMemory / PostgresTestContainer** (fil checkout)

@@ -3,6 +3,8 @@ title: execute
 description: T2 · B · PRODUIRE — yadra execute (phase.execute, boucle sandbox/repair).
 ---
 
+Chemin quotidien : [`yadra make`](/docs/make/). Mode expert ci-dessous.
+
 Triade T2 : **COMPRENDRE** (`yadra plan`) → **PRODUIRE** (`yadra execute`) → **LIVRER** (`yadra gate`).
 
 La commande `yadra execute` est **B · PRODUIRE** : kinds **`outputs.phase.execute`** (par défaut `code`, `data`, `tests`). Elle valide la spec, vérifie le seal T1 (sauf dev), recalcule plan / bindings / manifest **en mémoire**, produit la spécialisation T2 · A **en mémoire** (LLM), matérialise sous **`PROJECT_HOME`**, puis lance **`gradle test`** et une boucle **repair** bornée par **`budget.max_repair_loops`**.
@@ -27,6 +29,9 @@ Aucun reçu JSON, aucun cache `.yadra/compile-plans/` sur le disque KSL.
 | `--no-verify` | PRODUIRE sans sandbox Gradle / repair. |
 | `--allow-unsealed` | Dev sans seal T1 valide. |
 | `--skip-llm` | Uniquement avec `--dry-run`. |
+| `--combined` | Un pass LLM (strategies = contraintes). |
+| `--merge` | Écriture autorisée sur un fichier déjà possédé. |
+| `--verbose` / `-v` | Liste chaque fichier écrit (défaut : un compteur). |
 
 ## Stack KSL (langage et build)
 

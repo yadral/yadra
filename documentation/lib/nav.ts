@@ -144,6 +144,14 @@ export const NAV: NavItem[] = [
     since: "0.1.5",
   },
   {
+    slug: "make",
+    product: "yadra",
+    title: { fr: "yadra make", en: "yadra make" },
+    section: { fr: "Timeline 2 (T2)", en: "Timeline 2 (T2)" },
+    badge: "T2",
+    since: "0.1.14",
+  },
+  {
     slug: "files/projects-json",
     product: "yadra",
     title: { fr: "projects.json", en: "projects.json" },

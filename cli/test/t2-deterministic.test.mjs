@@ -54,7 +54,59 @@ test("buildFileManifest is stable and lists hexagonal paths", () => {
   );
   assert.ok(m1.files.length > 5);
   assert.ok(
-    m1.files.some((f) => f.path.includes("CheckoutApi") && f.path.endsWith(".kt")),
+    m1.files.some((f) => f.path.endsWith("domain/checkout/CheckoutApi.kt")),
+  );
+  assert.equal(
+    m1.files.some((f) => f.path.includes("domain/api/")),
+    false,
+  );
+  assert.ok(
+    m1.files.some((f) => f.path.endsWith("domain/spi/checkout/OrderSpi.kt")),
+  );
+  assert.ok(
+    m1.files.some((f) => f.path.endsWith("domain/mapper/checkout/OrderSpiMapper.kt")),
+  );
+});
+
+test("Hexagonal-Service manifest does not emit a RestController", () => {
+  const root = distRoot();
+  const plan = buildPlan(SPEC, { distRoot: root });
+  const specText = readFileSync(SPEC, "utf8");
+  const bindings = resolveT2Bindings({
+    kslProjectHome: join(YADRA_ROOT, "ksl/examples/minimal"),
+    specPath: SPEC,
+    specText,
+  });
+  const servicePlan = {
+    ...plan,
+    strategies: plan.strategies.map((strategy) =>
+      strategy.id === "hexagonal"
+        ? {
+            ...strategy,
+            declaredName: "Hexagonal-Service",
+            id: "hexagonal-service",
+            name: "Hexagonal-Service",
+            skeleton: "ksl/hexagonal-service.strategy.ksl",
+          }
+        : strategy,
+    ),
+  };
+  const manifest = buildFileManifest({
+    distRoot: root,
+    deterministicPlan: servicePlan,
+    bindings,
+  });
+  assert.equal(
+    manifest.files.some((file) => file.path.includes("RestController")),
+    false,
+  );
+  assert.ok(
+    manifest.files.some((file) => file.path.endsWith("domain/checkout/CheckoutApi.kt")),
+  );
+  assert.ok(
+    manifest.files.some((file) =>
+      file.path.endsWith("domain/workflow/api/checkout/CheckoutService.kt"),
+    ),
   );
 });
 

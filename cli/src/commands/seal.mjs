@@ -17,10 +17,11 @@ export async function cmdSeal(flags, positional, cwd, wsOptions = {}) {
     console.error(`Unexpected argument: ${positional[1]}`);
     return 2;
   }
-  syncKslToolEnv(cwd, wsOptions);
+  const wsOpts = { ...wsOptions, seedPath: positional[0] ?? "." };
+  syncKslToolEnv(cwd, wsOpts);
   let ws;
   try {
-    ws = requireKslProjectHome(cwd, wsOptions);
+    ws = requireKslProjectHome(cwd, wsOpts);
   } catch (e) {
     console.error(e.message);
     return 2;
@@ -36,10 +37,10 @@ export async function cmdSeal(flags, positional, cwd, wsOptions = {}) {
     return 2;
   }
 
-  if (!flags.skipLlm) {
+  if (!flags.skipLlm && flags.verbose) {
     const ctx = loadCommandContext(ws, "seal");
     console.log("T1 · seal — SKILL + plan validate (C · LIVRER)");
-    logCommandContext(ctx);
+    logCommandContext(ctx, true);
     console.log("");
   }
 

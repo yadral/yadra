@@ -115,6 +115,9 @@ flowchart TB
 ### Recommended flow
 
 ```bash
+yadra make prompts/my-feature/                    # daily (T1 + T2)
+
+# Expert:
 yadra seal feature.spec.ksl
 yadra plan feature.spec.ksl --skip-llm          # A · COMPRENDRE (preview)
 yadra execute feature.spec.ksl                    # B · PRODUIRE (+ loop)

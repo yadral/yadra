@@ -1,0 +1,56 @@
+name: Release VS Code KSL extension
+
+on:
+  push:
+    tags:
+      - "vscode-isl-*"
+
+permissions:
+  contents: write
+
+jobs:
+  package-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Read extension version
+        id: meta
+        working-directory: ksl/editor/ksl-vscode
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "vsix=kom-ksl-${VERSION}.vsix" >> "$GITHUB_OUTPUT"
+
+      - name: Package VSIX
+        working-directory: ksl/editor/ksl-vscode
+        run: npx --yes @vscode/vsce package --allow-missing-repository
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kom-ksl-vscode
+          path: ksl/editor/ksl-vscode/kom-ksl-*.vsix
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Kom KSL editor ${{ steps.meta.outputs.version }}
+          body: |
+            Syntax highlighting extension for `.ksl` files (Cursor / VS Code).
+
+            Install without cloning extension sources:
+
+            ```bash
+            # Download `kom-ksl-${{ steps.meta.outputs.version }}.vsix` from Assets below, then:
+            cursor --install-extension kom-ksl-${{ steps.meta.outputs.version }}.vsix
+            # or: code --install-extension ...
+            ```
+
+            Language spec and grammar remain in the Git repo (`docs/ksl-language-spec.md`, `ksl/grammar/ksl.ebnf`).
+          files: ksl/editor/ksl-vscode/${{ steps.meta.outputs.vsix }}
+          generate_release_notes: true

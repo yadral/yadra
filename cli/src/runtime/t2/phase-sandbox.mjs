@@ -28,30 +28,61 @@ export function defaultRunCommand(cwd, command, args, timeoutMs) {
 }
 
 /**
- * Run build/tests under PROJECT_HOME (Gradle MVP).
- * @returns {{ ok: boolean, skipped?: boolean, reason?: string, exitCode: number, log: string }}
+ * Commande de test sous PROJECT_HOME selon stack.build.
+ * Gradle : ./gradlew test --no-daemon, sinon gradle.
+ * Maven : ./mvnw -B test, sinon mvn.
+ */
+export function resolveSandboxInvocation(projectHome, build) {
+  const normalized = String(build ?? "gradle").toLowerCase();
+  const isWin = process.platform === "win32";
+  if (normalized === "gradle") {
+    const wrapper = join(projectHome, isWin ? "gradlew.bat" : "gradlew");
+    return {
+      tool: "gradle",
+      label: "gradle test",
+      command: existsSync(wrapper) ? wrapper : "gradle",
+      args: ["test", "--no-daemon"],
+    };
+  }
+  if (normalized === "maven") {
+    const wrapper = join(projectHome, isWin ? "mvnw.cmd" : "mvnw");
+    return {
+      tool: "maven",
+      label: "mvn test",
+      command: existsSync(wrapper) ? wrapper : "mvn",
+      args: ["-B", "test"],
+    };
+  }
+  return null;
+}
+
+export function sandboxLabel(bindings) {
+  const invocation = resolveSandboxInvocation(
+    "",
+    bindings?.stack?.build ?? "gradle",
+  );
+  return invocation?.label ?? `${bindings?.stack?.build ?? "?"} (unsupported)`;
+}
+
+/**
+ * Run build/tests under PROJECT_HOME.
+ * @returns {{ ok: boolean, skipped?: boolean, reason?: string, exitCode: number, log: string, tool?: string, label?: string }}
  */
 export function runProjectSandbox(projectHome, bindings, options = {}) {
   const runCommand = options.runCommand ?? defaultRunCommand;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const build = String(bindings?.stack?.build ?? "gradle").toLowerCase();
-  if (build !== "gradle") {
+  const invocation = resolveSandboxInvocation(projectHome, bindings?.stack?.build ?? "gradle");
+  if (!invocation) {
     return {
       ok: false,
       skipped: true,
-      reason: `stack.build "${bindings?.stack?.build ?? "?"}" is not supported for sandbox (MVP: gradle)`,
+      reason: `stack.build "${bindings?.stack?.build ?? "?"}" is not supported for sandbox (gradle, maven)`,
       exitCode: 2,
       log: "",
     };
   }
 
-  const isWin = process.platform === "win32";
-  const wrapper = join(projectHome, isWin ? "gradlew.bat" : "gradlew");
-  const hasWrapper = existsSync(wrapper);
-  const command = hasWrapper ? wrapper : "gradle";
-  const args = ["test", "--no-daemon"];
-
-  const run = runCommand(projectHome, command, args, timeoutMs);
+  const run = runCommand(projectHome, invocation.command, invocation.args, timeoutMs);
   const combined = [run.stdout, run.stderr].filter(Boolean).join("\n");
   const log = tail(combined, 120);
   const ok = run.exitCode === 0 && !run.signal && !run.error;
@@ -62,6 +93,8 @@ export function runProjectSandbox(projectHome, bindings, options = {}) {
       exitCode: 1,
       log: `${run.error}\n${log}`,
       reason: run.error,
+      tool: invocation.tool,
+      label: invocation.label,
     };
   }
 
@@ -69,6 +102,8 @@ export function runProjectSandbox(projectHome, bindings, options = {}) {
     ok,
     exitCode: run.exitCode ?? 1,
     log,
-    reason: ok ? undefined : `gradle test exited ${run.exitCode ?? 1}`,
+    tool: invocation.tool,
+    label: invocation.label,
+    reason: ok ? undefined : `${invocation.label} exited ${run.exitCode ?? 1}`,
   };
 }

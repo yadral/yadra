@@ -27,6 +27,31 @@ test("parseArgs reads separated and inline values", () => {
   assert.deepEqual(parsed.flags.kinds, ["code", "data"]);
 });
 
+test("parseArgs maps -v to verbose", () => {
+  const parsed = parseArgs(["-v", "--step", "t1"]);
+  assert.equal(parsed.error, null);
+  assert.equal(parsed.flags.verbose, true);
+  assert.equal(parsed.provided.has("--verbose"), true);
+  assert.equal(parsed.provided.has("-v"), false);
+});
+
+test("parseArgs reads make flags", () => {
+  const parsed = parseArgs([
+    "--step",
+    "t2",
+    "--no-gate",
+    "--no-combined",
+    "--merge",
+    "--combined",
+  ]);
+  assert.equal(parsed.error, null);
+  assert.equal(parsed.flags.step, "t2");
+  assert.equal(parsed.flags.noGate, true);
+  assert.equal(parsed.flags.noCombined, true);
+  assert.equal(parsed.flags.merge, true);
+  assert.equal(parsed.flags.combined, true);
+});
+
 test("parseArgs rejects missing option values", () => {
   assert.equal(
     parseArgs(["set", "--profile"]).error,

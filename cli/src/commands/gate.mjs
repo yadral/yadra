@@ -18,6 +18,7 @@ import { buildT2CompileContext } from "../runtime/t2/compile-context.mjs";
 import { runPhaseCGateProduce } from "../runtime/t2/phase-gate-produce.mjs";
 import { runConformanceGate } from "../runtime/t2/phase-livrer.mjs";
 import { verifyT1Seal } from "../runtime/t2/seal-check.mjs";
+import { logVerbose, logWrittenFiles } from "../util/log.mjs";
 
 function exitCodeForGateResult(result) {
   if (result === "SATISFIED") return 0;
@@ -47,17 +48,18 @@ export async function cmdGate(flags, positional, cwd, wsOptions = {}) {
     return 2;
   }
 
-  syncKslToolEnv(cwd, wsOptions);
+  const wsOpts = { ...wsOptions, seedPath: positional[0] ?? "." };
+  syncKslToolEnv(cwd, wsOpts);
   let ws;
   try {
-    ws = requireKslProjectHome(cwd, wsOptions);
+    ws = requireKslProjectHome(cwd, wsOpts);
   } catch (error) {
     console.error(error.message);
     return 2;
   }
   if (!ws.projectHome) {
     console.error(
-      "PROJECT_HOME is required for T2 C. Configure --project-home with yadra project update.",
+      "PROJECT_HOME is required for T2 C. Set repo.path in root.project.ksl, or pass --project-home / yadra project update.",
     );
     return 2;
   }
@@ -123,10 +125,10 @@ export async function cmdGate(flags, positional, cwd, wsOptions = {}) {
   }
 
   if (flags.dryRun) {
-    if (!flags.skipLlm) {
+    if (!flags.skipLlm && flags.verbose) {
       const ctx = loadCommandContext(ws, "gate:C");
       console.log("T2 gate — C · LIVRER (dry-run · plan + SKILL)");
-      logCommandContext(ctx);
+      logCommandContext(ctx, true);
     }
     console.log("");
     console.log(formatPlanHuman(plan));
@@ -151,25 +153,22 @@ export async function cmdGate(flags, positional, cwd, wsOptions = {}) {
       return 2;
     }
     try {
-      console.log("");
-      console.log(`T2 · gate · LIVRER "${plan.spec}"`);
-      console.log(`  gate kinds: ${plan.kinds.join(", ")}`);
-      console.log(`  PROJECT_HOME: ${ws.projectHome}`);
+      console.log(`gate ${plan.spec}`);
+      logVerbose(flags, `  gate kinds: ${plan.kinds.join(", ")}`);
+      logVerbose(flags, `  PROJECT_HOME: ${ws.projectHome}`);
       const produced = await runPhaseCGateProduce({
         ws,
         specPath,
         deterministicPlan: plan,
       });
-      console.log(`  gate produce: ${produced.files.length} file(s)`);
-      for (const file of produced.files) console.log(`    ${file.path}`);
+      logWrittenFiles(flags, produced.files);
     } catch (error) {
       console.error(error.message ?? error);
       return 1;
     }
   } else {
-    console.log("");
-    console.log(`T2 · gate · LIVRER "${plan.spec}" (conformance)`);
-    console.log(`  gate kinds: ${plan.kinds.join(", ")}`);
+    logVerbose(flags, `gate ${plan.spec} (conformance)`);
+    logVerbose(flags, `  gate kinds: ${plan.kinds.join(", ")}`);
   }
 
   const outcome = runConformanceGate({
@@ -182,10 +181,9 @@ export async function cmdGate(flags, positional, cwd, wsOptions = {}) {
   if (flags.format === "json") {
     console.log(JSON.stringify(outcome, null, 2));
   } else {
-    console.log(`Conformance Gate: ${outcome.result}`);
-    console.log(`  spec: ${outcome.spec}`);
-    console.log(`  manifest: ${outcome.manifestPath}`);
-    console.log(`  ${outcome.detail}`);
+    console.log(`gate ${outcome.result} ${outcome.spec}`);
+    logVerbose(flags, `  manifest: ${outcome.manifestPath}`);
+    logVerbose(flags, `  ${outcome.detail}`);
   }
 
   return exitCodeForGateResult(outcome.result);

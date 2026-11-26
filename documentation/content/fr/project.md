@@ -1,6 +1,6 @@
 ---
 title: yadra project
-description: Enregistre plusieurs projets (KSL + code), active le projet courant avec use, exporte les variables shell.
+description: Alias optionnels (KSL + code), override --project, export shell — pas requis au quotidien avec l'auto-detect.
 ---
 
 Un **projet Yadra** est un couple de dépôts :
@@ -8,7 +8,9 @@ Un **projet Yadra** est un couple de dépôts :
 - **`kslProjectHome`** — specs KSL (`KSL_PROJECT_HOME`)
 - **`projectHome`** — code applicatif généré (`PROJECT_HOME`)
 
-Les chemins enregistrés sont **toujours absolus**. Pour changer de microservice : **`yadra project use <name>`**.
+Les chemins enregistrés sont **toujours absolus**.
+
+> **CLI ≥ 0.1.15 :** pour un seul produit, préférez l’[auto-detect](/docs/overview/#configuration-minimale-recommandée) (`root.project.ksl` + `repo.path`). `yadra project` reste utile pour les **alias multi-produits / CI** (`--project <name>`), pas comme étape quotidienne.
 
 ## Synopsis
 

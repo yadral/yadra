@@ -5,6 +5,22 @@ description: Configure les fournisseurs LLM, les profils de modèles et les iden
 
 La commande `yadra configure` gère les paramètres de connexion aux fournisseurs de modèles de langage (LLM) ainsi que les secrets d'authentification (jetons API, clés d'accès ou couples identifiant/mot de passe).
 
+## Configuration minimale recommandée
+
+C’est **la seule config utilisateur requise** au quotidien (CLI ≥ 0.1.15). Le workspace KSL/code est auto-détecté par [`yadra make`](/docs/make/) — pas besoin de `yadra project use` pour un seul produit.
+
+```bash
+# Une fois par machine
+yadra configure set --profile cursor --provider cursor --model composer-2.5-fast
+yadra configure credentials --profile cursor --token "VOTRE_CLE_CRSR"
+yadra configure test
+
+# Ensuite
+yadra make prompts/ma-feature/
+```
+
+Vue d’ensemble : [Configuration minimale recommandée](/docs/overview/#configuration-minimale-recommandée).
+
 ## Synopsis
 
 ```bash

@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { chatCompletion } from "../llm/chat.mjs";
 import { loadCommandContext, llmRuntime } from "../command-context.mjs";
 import { extractMarkedFiles } from "../formalize/parse-llm-files.mjs";
+import { loadOwners } from "./file-owners.mjs";
 import { materializeProjectFiles } from "./phase-produce.mjs";
+import { pathCited, pathsCitedBySandbox } from "./sandbox-errors.mjs";
 
 function snippet(path, projectHome, maxChars = 12_000) {
   try {
@@ -22,46 +24,34 @@ export async function runPhaseBRepair({
   specialization,
   sandboxLog,
   producedPaths,
+  testCommand = "the project tests",
+  errorPaths,
+  approach,
   complete = chatCompletion,
 }) {
   const ctx = loadCommandContext(ws, "execute:B");
-  const spec = readFileSync(specPath, "utf8");
-  const contract = readFileSync(ctx.plan.path, "utf8");
-  const paths = [...new Set(producedPaths)].sort();
+  const cited = errorPaths?.length ? errorPaths : pathsCitedBySandbox(sandboxLog);
+  const limited = approach?.widen ? cited : cited.slice(0, 1);
+  const paths = [...new Set(limited.length > 0 ? limited : producedPaths)].slice(0, 6);
 
   const fileSnippets = paths
-    .slice(0, 24)
-    .map((p) => `### ${p}\n${snippet(p, ws.projectHome)}`)
+    .map((p) => `### ${p}\n${snippet(p, ws.projectHome, 4_000)}`)
     .join("\n\n");
 
   const user = [
-    "# T2 · B · REPAIR (sandbox failure)",
+    `# Réparer ${testCommand}`,
     "",
-    "## Bindings (non négociables)",
-    JSON.stringify(bindings, null, 2),
+    `basePackage ${bindings.basePackage}`,
     "",
-    "## Spécialisation T2 · A",
-    specialization,
-    "",
-    "## Spec KSL",
-    spec.slice(0, 60_000),
-    "",
-    "## Échec sandbox (build/tests)",
     sandboxLog || "(no log)",
-    "",
-    "## Fichiers déjà produits (corrige uniquement ceux nécessaires)",
-    paths.map((p) => `- ${p}`).join("\n") || "(aucun)",
     "",
     fileSnippets,
     "",
-    "## Contrat B",
-    contract.slice(0, 30_000),
-    "",
-    "## Consignes",
-    "- Corrige le code sous PROJECT_HOME pour faire passer `gradle test`.",
-    "- Réponse : blocs `--- FILE: <chemin relatif> ---` uniquement.",
-    "- Ne modifie que les fichiers pertinents ; contenu complet par fichier touché.",
-  ].join("\n");
+    approach?.instruction ? `## Autre approche\n${approach.instruction}` : "",
+    "Réponse : blocs `--- FILE: <chemin relatif> ---` uniquement, contenu complet.",
+    "Réécris les fichiers cités dans l'erreur. Laisse les autres.",
+    "Si cette erreur a déjà été vue, le source renvoyé doit être différent.",
+  ].filter((line) => line !== "").join("\n");
 
   const raw = await complete({
     ...llmRuntime(ctx.llm),
@@ -74,9 +64,20 @@ export async function runPhaseBRepair({
   if (!marked?.length) {
     throw new Error("T2 repair: invalid LLM response; expected --- FILE: --- blocks.");
   }
-  const allowed = new Set(paths);
+  for (const file of marked) {
+    const previous = snippet(file.rel, ws.projectHome, 100_000);
+    if (previous !== "(unreadable)" && previous.trim() === file.content.trim()) {
+      throw new Error(`contenu identique, autre approche requise: ${file.rel}`);
+    }
+  }
   const files = materializeProjectFiles(ws.projectHome, marked, {
-    allowOnly: allowed.size > 0 ? [...allowed] : null,
+    specId: String(specPath ?? "").replaceAll("\\", "/"),
+    owners: loadOwners(ws.projectHome),
+    mode: "repair",
+    errorPaths: cited,
   });
+  if (cited.length > 0 && !files.some((file) => pathCited(file.path, cited))) {
+    throw new Error("réparation hors de l'erreur");
+  }
   return { files };
 }

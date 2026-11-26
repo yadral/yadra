@@ -338,13 +338,24 @@ test("execute dry-run requires PROJECT_HOME and prints compile plan", () => {
     assert.match(dry.stdout, /basePackage:/);
     assert.match(dry.stdout, /file manifest:/);
 
+    // Root without repo.path → PROJECT_HOME cannot be inferred
     const homeNoProject = mkdtempSync(join(tmpdir(), "yadra-cli-home-noproj-"));
-    const noApp = run(["execute", spec, "--dry-run", "--allow-unsealed"], {
-      home: homeNoProject,
-      kslProjectHome: kslHome,
-    });
+    const kslNoRepo = mkdtempSync(join(tmpdir(), "yadra-cli-ksl-norepo-"));
+    writeFileSync(
+      join(kslNoRepo, "root.project.ksl"),
+      'ksl 1.0\nproject "norepo" {\n  kind = "root"\n}\n',
+    );
+    writeFileSync(
+      join(kslNoRepo, "lonely.spec.ksl"),
+      'ksl 1.0\nspec "lonely" {\n  module = "lonely"\n}\n',
+    );
+    const noApp = run(
+      ["execute", join(kslNoRepo, "lonely.spec.ksl"), "--dry-run", "--allow-unsealed"],
+      { home: homeNoProject },
+    );
     rmSync(homeNoProject, { recursive: true, force: true });
-    assert.equal(noApp.status, 2);
+    rmSync(kslNoRepo, { recursive: true, force: true });
+    assert.equal(noApp.status, 2, noApp.stderr);
     assert.match(noApp.stderr, /PROJECT_HOME is required/);
   } finally {
     rmSync(home, { recursive: true, force: true });
@@ -379,7 +390,7 @@ test("execute dry-run shows phase gate kinds and sandbox hint", () => {
     assert.equal(result.status, 0);
     assert.match(result.stdout, /phase\.gate: docs, e2e/);
     assert.match(result.stdout, /gate kinds \(yadra gate\)/);
-    assert.match(result.stdout, /max_repair_loops=5/);
+    assert.match(result.stdout, /max_repair_loops=8/);
   } finally {
     rmSync(home, { recursive: true, force: true });
     rmSync(appHome, { recursive: true, force: true });

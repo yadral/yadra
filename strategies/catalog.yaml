@@ -19,8 +19,22 @@ strategies:
     when:
       outputs_kinds_any: [code]
     description_hint: |
-      Domain and use cases in modules/<domain>; ports/adapters for REST, persistence, messaging.
-      Cite paths under PROJECT_HOME and KSL output_paths.spec.
+      Inbound HTTP adapter (OpenAPI, admin, provider callback, internal job) plus secondary ports.
+      Do not combine with Hexagonal-Service.
+
+  - id: hexagonal-service
+    name: "Hexagonal-Service"
+    role: architecture
+    family: architecture
+    skeleton: "ksl/hexagonal-service.strategy.ksl"
+    profile: "tontine"
+    requires: ["Populator/Converter"]
+    when:
+      outputs_kinds_any: [code]
+      signals_any: ["en processus", "hexagonal-service", "in-process", "pas de controller"]
+    description_hint: |
+      In-process service only: domain API and ApplicationService, outbound SPI, no RestController.
+      Use instead of Hexagonal when another service in the same process is the caller.
 
   - id: validator
     name: "Validator"

@@ -20,32 +20,50 @@ Vérifier : `yadra doctor`
 | Variable | Rôle |
 |----------|------|
 | **`KSL_HOME`** | Grammaire / libs embarquées dans le paquet CLI (`npm install @yadral/yadra`) — défaut auto au démarrage. |
-| **`KSL_PROJECT_HOME`** | Racine du **monorepo specs KSL** (`root.project.ksl`, `kind = "root"`, modules, specs). |
-| **`PROJECT_HOME`** | Racine **cible** du code généré en T2 — enregistrée via **`yadra project`** (souvent alignée sur `repo.path` du **`root.project.ksl`**). |
-## Ancrage projet : `yadra project`
+| **`KSL_PROJECT_HOME`** | Racine du **monorepo specs KSL** (`root.project.ksl`, `kind = "root"`, modules, specs) — **auto-détectée** depuis le path/cwd. |
+| **`PROJECT_HOME`** | Racine **cible** du code généré en T2 — **auto** via `repo.path` du root KSL (override : `--project-home` / registre). |
 
-Avant `validate` / `plan` / `execute` / `gate` avec PATH = `.`, enregistrer le couple specs + code :
+## Configuration minimale recommandée
+
+```bash
+# 1. Une fois par machine — LLM uniquement
+yadra configure set --profile cursor --provider cursor --model composer-2.5-fast
+yadra configure credentials --profile cursor --token "…"
+yadra configure test
+
+# 2. Produit : root.project.ksl (ou ksl/) + repo.path + prompts/
+# 3. Quotidien — pas de project use
+yadra make prompts/ma-feature/
+```
+
+## Ancrage projet (optionnel) : `yadra project`
+
+Utile pour **alias multi-produits / CI** (`--project <name>`), pas pour le chemin quotidien :
 
 ```bash
 yadra project add order-demo \
   --ksl-project-home /chemin/vers/monorepo-ksl \
   --project-home /chemin/vers/cible-code
-yadra project use order-demo
-eval "$(yadra project export)"
+yadra make prompts/checkout/ --project order-demo
 ```
-
-Un PATH **explicite** vers un fichier `.spec.ksl` ne nécessite pas le projet courant si `--ksl-project-home` / `--project-home` sont passés.
 
 ## Flux quotidien (repo métier)
 
 ```bash
-yadra project use order-demo
-cd "$KSL_PROJECT_HOME/services/order-service/modules/checkout"
-yadra validate order-checkout.spec.ksl --semantic
-yadra seal order-checkout.spec.ksl
-yadra plan order-checkout.spec.ksl --skip-llm
-yadra execute order-checkout.spec.ksl --allow-unsealed
-yadra gate order-checkout.spec.ksl --dry-run --skip-llm --allow-unsealed
+# Workspace auto-détecté depuis le path (root.project.ksl / ksl/ + repo.path)
+yadra make prompts/checkout/
+# depuis n'importe où :
+# yadra make /chemin/vers/prompts/checkout/
+
+# Override multi-produits / CI :
+# yadra make prompts/checkout/ --project order-demo
+
+# Mode expert (une spec) :
+yadra validate path/to/order-checkout.spec.ksl --semantic
+yadra seal path/to/order-checkout.spec.ksl
+yadra plan path/to/order-checkout.spec.ksl --skip-llm
+yadra execute path/to/order-checkout.spec.ksl --allow-unsealed
+yadra gate path/to/order-checkout.spec.ksl --dry-run --skip-llm --allow-unsealed
 ```
 
 ---
@@ -133,8 +151,34 @@ Flags :
 - `--dry-run` — plan + phase ; aucune écriture
 - `--no-verify` — PRODUIRE sans sandbox / repair
 - `--skip-llm` — uniquement avec `--dry-run`
+- `--combined` — un pass LLM (strategies = contraintes)
+- `--merge` — autorise l’écriture sur un fichier déjà possédé
 
 En production T2 stricte : pas de `--allow-unsealed` ; seal T1 frais requis.
+
+---
+
+## `yadra make [PATH]`
+
+**Chemin quotidien (CLI 0.1.14+)** : une commande, du Doc First au code sous `PROJECT_HOME`. KSL reste l’IR (validate / seal) — plus besoin de l’écrire ni d’enchaîner `formalize` → `plan` → `execute` → `gate`.
+
+`PATH` : dossier (`prompts/…` ou `.`), `feature.yadra.md`, ou `.spec.ksl`. Découvre les features, les ordonne (root → service → specs → module), puis :
+
+1. **T1** `formalize` (validate + seal)
+2. **T2** `execute` en **slice unique** (`--combined`) avec **merge** d’ownership
+3. **T2** `gate` (sauf `--no-gate`)
+
+```bash
+yadra make prompts/momo-cm/
+yadra make . --dry-run --skip-llm
+yadra make prompts/momo-cm/specs/request-to-pay/ --step t2
+```
+
+Flags notables : `--step all|t1|t2|execute|gate`, `--no-gate`, `--no-combined`, `--no-merge`, `--force` (relance même si execute est frais), `--verbose` / `-v` (chemins et SKILL ; défaut = une ligne par étape), `--format json`.
+
+Doc site : [`make`](../documentation/content/fr/make.md) (FR) · [`make`](../documentation/content/en/make.md) (EN).
+
+Les commandes `formalize` / `execute` / `gate` restent le **mode expert**.
 
 > Le binaire monorepo `ksl/tools/yadra/bin/yadra.mjs` conserve encore un stub Gate ; le **CLI packagé** implémente B réel via `yadra/cli`.
 
@@ -212,6 +256,6 @@ Alias documentés : `validate` = `check` / `lint` ; `execute` = `run` / `materia
 
 Package Node : [`tools/yadra/`](../tools/yadra/). Phases :
 
-CLI packagé **0.1.8** : transversal + **T1** (`formalize`, `validate`, `seal`) + **T2** (`plan`, `execute`, `gate`, `strategies`).
+CLI packagé **0.1.14** : transversal + **T1** (`formalize`, `validate`, `seal`) + **T2** (`plan`, `execute`, `gate`, `make`, `strategies`).
 
 Parser EBNF complet (L1 strict) : [`docs/ksl-validator-roadmap.md`](ksl-validator-roadmap.md).

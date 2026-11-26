@@ -9,6 +9,7 @@ import { cmdDoctor } from "./commands/doctor.mjs";
 import { cmdExecute } from "./commands/execute.mjs";
 import { cmdGate } from "./commands/gate.mjs";
 import { cmdFormalize } from "./commands/formalize.mjs";
+import { cmdMake } from "./commands/make.mjs";
 import { cmdHelp } from "./commands/help.mjs";
 import { cmdPlan } from "./commands/plan.mjs";
 import { cmdStrategies } from "./commands/strategies.mjs";
@@ -25,6 +26,7 @@ const COMMON_PROJECT_OVERRIDES = [
   "--project-home",
   "--yadra-project-home",
 ];
+const VERBOSE_FLAG = ["--verbose"];
 
 function allowedFlags(cmd, sub) {
   const byCommand = {
@@ -41,10 +43,11 @@ function allowedFlags(cmd, sub) {
       "--force",
       "--refresh",
       "--no-ensure-layout",
+      ...VERBOSE_FLAG,
       ...COMMON_PROJECT_OVERRIDES,
     ],
   validate: ["--syntax", "--layout", "--semantic", "--format", ...COMMON_PROJECT_OVERRIDES],
-  plan: ["--format", "--kinds", "--skip-llm", ...COMMON_PROJECT_OVERRIDES],
+  plan: ["--format", "--kinds", "--skip-llm", ...VERBOSE_FLAG, ...COMMON_PROJECT_OVERRIDES],
   execute: [
     "--kinds",
     "--dry-run",
@@ -52,6 +55,36 @@ function allowedFlags(cmd, sub) {
     "--skip-llm",
     "--repair",
     "--no-verify",
+    "--combined",
+    "--merge",
+    ...VERBOSE_FLAG,
+    ...COMMON_PROJECT_OVERRIDES,
+  ],
+  make: [
+    "--step",
+    "--dry-run",
+    "--skip-llm",
+    "--force",
+    "--refresh",
+    "--no-ensure-layout",
+    "--seal",
+    "--no-seal",
+    "--syntax",
+    "--include",
+    "--kinds",
+    "--allow-unsealed",
+    "--no-verify",
+    "--no-gate",
+    "--no-combined",
+    "--no-merge",
+    "--combined",
+    "--merge",
+    "--format",
+    "--allow-no-execute",
+    "--produce",
+    "--model",
+    "--profile",
+    ...VERBOSE_FLAG,
     ...COMMON_PROJECT_OVERRIDES,
   ],
   gate: [
@@ -62,9 +95,10 @@ function allowedFlags(cmd, sub) {
     "--allow-no-execute",
     "--produce",
     "--skip-llm",
+    ...VERBOSE_FLAG,
     ...COMMON_PROJECT_OVERRIDES,
   ],
-  seal: ["--syntax", "--include", "--skip-llm", ...COMMON_PROJECT_OVERRIDES],
+  seal: ["--syntax", "--include", "--skip-llm", ...VERBOSE_FLAG, ...COMMON_PROJECT_OVERRIDES],
   strategies: ["--format", "--family", "--role", "--section", "--hints"],
   };
   if (cmd === "configure") {
@@ -134,7 +168,11 @@ function applyTransientOverrides(flags, cwd) {
 }
 
 function workspaceOptions(flags) {
-  return flags.project ? { projectName: flags.project } : {};
+  return {
+    ...(flags.project ? { projectName: flags.project } : {}),
+    ...(flags.kslProjectHome ? { kslProjectHome: flags.kslProjectHome } : {}),
+    ...(flags.projectHome ? { projectHome: flags.projectHome } : {}),
+  };
 }
 
 async function main() {
@@ -183,6 +221,7 @@ async function main() {
     "plan",
     "execute",
     "gate",
+    "make",
     "strategies",
   ]);
   const sub = ["configure", "project", "strategies"].includes(cmd)
@@ -245,6 +284,9 @@ async function main() {
       break;
     case "gate":
       code = await cmdGate(flags, positional, cwd, workspaceOptions(flags));
+      break;
+    case "make":
+      code = await cmdMake(flags, positional, cwd, workspaceOptions(flags));
       break;
     case "strategies": {
       const [sub, ...args] = positional;

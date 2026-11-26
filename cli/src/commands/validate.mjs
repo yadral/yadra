@@ -10,7 +10,8 @@ export function cmdValidate(flags, positional, cwd, wsOptions = {}) {
     console.error("--format must be human or json.");
     return 2;
   }
-  syncKslToolEnv(cwd, wsOptions);
+  const wsOpts = { ...wsOptions, seedPath: positional[0] ?? "." };
+  syncKslToolEnv(cwd, wsOpts);
   let target;
   try {
     target = resolveCommandPath(positional[0] ?? ".", cwd);

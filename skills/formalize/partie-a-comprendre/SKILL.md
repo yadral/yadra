@@ -37,7 +37,7 @@ Un **`.compact.ksl`** complet avec `# deliverables`, sections `# .spec.ksl` (int
    ```
 
 5. Règles :
-   - `outputs` contient **code** → au moins une strategy **architecture** (ex. Hexagonal).
+   - `outputs` contient **code** → une strategy **architecture** : **Hexagonal** s'il y a un adapter HTTP entrant (OpenAPI, callback provider, admin, job interne) ; **Hexagonal-Service** si l'appelant est un service du même processus et qu'aucun controller n'est dans le scope. Ne pas émettre les deux.
    - API/DTO/mapping/graphql → **`Populator/Converter`** (un seul nom).
    - **tests** / usecases → **FluentCaseTest** si pertinent.
    - Pas `(vide — …)` sur strategies si kinds lourds sans question utilisateur.

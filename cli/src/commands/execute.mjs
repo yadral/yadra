@@ -14,11 +14,14 @@ import {
 } from "../runtime/command-context.mjs";
 import { runPhaseBProduce } from "../runtime/t2/phase-produce.mjs";
 import { runPhaseBRepair } from "../runtime/t2/phase-repair.mjs";
-import { runProjectSandbox } from "../runtime/t2/phase-sandbox.mjs";
-import { producePlanSpecialization } from "../runtime/t2/phase-plan.mjs";
+import { deterministicEdits, strategyFor } from "../runtime/t2/repair-strategy.mjs";
+import { errorSignature, pathsCitedBySandbox, sandboxExcerpt } from "../runtime/t2/sandbox-errors.mjs";
+import { materializeProjectFiles } from "../runtime/t2/phase-produce.mjs";
+import { runProjectSandbox, sandboxLabel } from "../runtime/t2/phase-sandbox.mjs";
 import { buildT2CompileContext } from "../runtime/t2/compile-context.mjs";
 import { writeExecuteBundleEvidence } from "../runtime/t2/phase-livrer.mjs";
 import { verifyT1Seal } from "../runtime/t2/seal-check.mjs";
+import { logVerbose, logWrittenFiles } from "../util/log.mjs";
 
 export async function cmdExecute(flags, positional, cwd, wsOptions = {}) {
   if (positional.length > 1) {
@@ -29,17 +32,18 @@ export async function cmdExecute(flags, positional, cwd, wsOptions = {}) {
     console.error("--skip-llm is only valid with --dry-run for yadra execute.");
     return 2;
   }
-  syncKslToolEnv(cwd, wsOptions);
+  const wsOpts = { ...wsOptions, seedPath: positional[0] ?? "." };
+  syncKslToolEnv(cwd, wsOpts);
   let ws;
   try {
-    ws = requireKslProjectHome(cwd, wsOptions);
+    ws = requireKslProjectHome(cwd, wsOpts);
   } catch (error) {
     console.error(error.message);
     return 2;
   }
   if (!ws.projectHome) {
     console.error(
-      "PROJECT_HOME is required for T2 B. Configure --project-home with yadra project update.",
+      "PROJECT_HOME is required for T2 B. Set repo.path in root.project.ksl, or pass --project-home / yadra project update.",
     );
     return 2;
   }
@@ -103,7 +107,10 @@ export async function cmdExecute(flags, positional, cwd, wsOptions = {}) {
     return 1;
   }
 
-  const maxRepairLoops = plan.budget?.max_repair_loops ?? 5;
+  const maxRepairLoops = Math.max(
+    plan.budget?.max_repair_loops ?? 4,
+    plan.budget?.max_iterations ?? 4,
+  );
   const verifyByDefault = !flags.noVerify;
 
   if (flags.dryRun) {
@@ -117,9 +124,11 @@ export async function cmdExecute(flags, positional, cwd, wsOptions = {}) {
     }
     console.log(
       verifyByDefault
-        ? `  sandbox: gradle test + repair loop (max_repair_loops=${maxRepairLoops})`
+        ? `  sandbox: ${sandboxLabel(bindings)} + repair loop (max_repair_loops=${maxRepairLoops})`
         : "  sandbox: skipped (--no-verify)",
     );
+    if (flags.combined) console.log("  LLM pass: combined (all strategies)");
+    if (flags.merge) console.log("  ownership: merge");
     console.log("T2 · execute dry-run: no file written.");
     return 0;
   }
@@ -133,92 +142,97 @@ export async function cmdExecute(flags, positional, cwd, wsOptions = {}) {
     return 2;
   }
   try {
-    console.log("");
-    console.log(`T2 · execute · PRODUIRE "${plan.spec}"`);
-    console.log(`  execute kinds: ${plan.kinds.join(", ")}`);
-    if (gateKinds.length > 0) {
-      console.log(`  gate kinds (yadra gate): ${gateKinds.join(", ")}`);
-    }
-    console.log(`  PROJECT_HOME: ${ws.projectHome}`);
-    console.log(`  basePackage: ${bindings.basePackage}`);
-    console.log(`  manifest: ${fileManifest.files.length} file(s), ${plan.strategies.length} strategies`);
-    console.log("  T2 · A spécialisation (mémoire, sans écriture KSL)…");
-    const { specialization } = await producePlanSpecialization(
-      specPath,
-      { kinds: flags.kinds, phaseRole: "execute" },
-      ws,
-    );
-    console.log("  calling LLM (one pass per strategy)…");
+    console.log(`execute ${plan.spec}`);
+    if (flags.combined) logVerbose(flags, "  slice unique (strategies as constraints)");
     let result = await runPhaseBProduce({
       ws,
       specPath,
       deterministicPlan: plan,
       bindings,
       fileManifest,
-      specialization,
+      specialization: "",
       maxRepairLoops,
+      combined: flags.combined === true,
+      allowMerge: flags.merge === true,
+      verbose: flags.verbose === true,
     });
     let producedPaths = result.files.map((f) => f.path);
-    console.log(`  files: ${result.files.length}`);
-    for (const file of result.files) console.log(`    ${file.path}`);
 
     if (!verifyByDefault) {
-      const manifestPath = writeExecuteBundleEvidence(ws, specPath, {
+      writeExecuteBundleEvidence(ws, specPath, {
         plan,
         verifyMode: "skipped",
         fileCount: result.files.length,
       });
-      console.log(`  bundle evidence: ${manifestPath}`);
-      console.log("T2 · execute OK (produce only, --no-verify).");
+      console.log("execute OK");
       return 0;
     }
 
+    const label = sandboxLabel(bindings);
     let repairAttempt = 0;
+    let previousSignature = "";
+    let repeat = 0;
     for (;;) {
-      console.log("");
-      console.log("T2 · execute · sandbox (gradle test)…");
+      console.log(`  ${label}`);
       const sandbox = runProjectSandbox(ws.projectHome, bindings);
       if (sandbox.skipped) {
-        console.error(`sandbox skipped: ${sandbox.reason}`);
-        console.error("Fix PROJECT_HOME / stack or use --no-verify.");
+        console.log(`  ${sandbox.reason}`);
         return 1;
       }
       if (sandbox.ok) {
-        const manifestPath = writeExecuteBundleEvidence(ws, specPath, {
+        writeExecuteBundleEvidence(ws, specPath, {
           plan,
-          verifyMode: "gradle",
+          verifyMode: sandbox.tool ?? "sandbox",
           fileCount: producedPaths.length,
         });
-        console.log(`  bundle evidence: ${manifestPath}`);
-        console.log("T2 · execute OK (sandbox passed).");
+        console.log("execute OK");
         return 0;
       }
-      console.error(`sandbox failed: ${sandbox.reason ?? "unknown"}`);
-      if (sandbox.log) {
-        console.error("");
-        console.error(sandbox.log);
-      }
+      const signature = errorSignature(sandbox.log);
+      repeat = signature && signature === previousSignature ? repeat + 1 : 0;
+      previousSignature = signature;
       if (repairAttempt >= maxRepairLoops) {
-        console.error("");
-        console.error(
-          `Repair budget exhausted (max_repair_loops=${maxRepairLoops}).`,
-        );
+        console.log(`  code encore invalide après ${maxRepairLoops} réparations`);
         return 1;
       }
       repairAttempt += 1;
-      console.log("");
-      console.log(`T2 · execute · repair ${repairAttempt}/${maxRepairLoops}…`);
-      const repaired = await runPhaseBRepair({
-        ws,
-        specPath,
-        bindings,
-        specialization,
-        sandboxLog: sandbox.log,
-        producedPaths,
-      });
-      for (const file of repaired.files) {
-        console.log(`    updated ${file.path}`);
-        if (!producedPaths.includes(file.path)) producedPaths.push(file.path);
+      const approach = strategyFor(sandbox.log, repeat);
+      console.log(`  réparation ${approach.id}`);
+      try {
+        const cited = pathsCitedBySandbox(sandbox.log);
+        let repaired = { files: [] };
+        if (approach.deterministic) {
+          const marked = deterministicEdits(ws.projectHome, sandbox.log, approach);
+          if (marked.length > 0) {
+              repaired = {
+              files: materializeProjectFiles(ws.projectHome, marked, {
+                specId: specPath,
+                mode: "repair",
+                errorPaths: cited,
+                allowMerge: flags.merge === true,
+              }),
+            };
+          }
+        }
+        if (repaired.files.length === 0) {
+          repaired = await runPhaseBRepair({
+            ws,
+            specPath,
+            bindings,
+            specialization: "",
+            sandboxLog: sandboxExcerpt(sandbox.log),
+            testCommand: sandbox.label ?? label,
+            producedPaths,
+            errorPaths: cited,
+            approach,
+          });
+        }
+        logWrittenFiles(flags, repaired.files);
+        for (const file of repaired.files) {
+          if (!producedPaths.includes(file.path)) producedPaths.push(file.path);
+        }
+      } catch {
+        // The next sandbox run shows whether the code is still invalid.
       }
     }
   } catch (error) {

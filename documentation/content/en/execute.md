@@ -27,6 +27,9 @@ No JSON receipt, no `.yadra/compile-plans/` cache on the KSL tree.
 | `--no-verify` | PRODUCE only; no Gradle sandbox / repair. |
 | `--allow-unsealed` | Dev without a valid T1 seal. |
 | `--skip-llm` | Only with `--dry-run`. |
+| `--combined` | One LLM pass (strategies as constraints). |
+| `--merge` | Allow writing a file already owned by another spec. |
+| `--verbose` / `-v` | List every written file (default: a count). |
 
 ## KSL stack (language and build)
 

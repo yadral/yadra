@@ -38,20 +38,33 @@ npm run dev          # http://localhost:3000
 
 Version affichée : lue depuis `manifest.mf` à la racine de **`yadra/`**.
 
-## Scripts (depuis la racine du dépôt)
+## Scripts (depuis la racine de ce dépôt `yadra/`)
 
 ```bash
-./scripts/install-yadra-cli.sh    # délègue à yadra/scripts/
+./scripts/install-yadra-cli.sh
 ./scripts/validate-ksl.sh
+./scripts/release-yadra-cli.sh <version>
 ```
+
+## Configuration minimale recommandée (CLI ≥ 0.1.15)
+
+```bash
+# Une fois : LLM
+yadra configure set --profile cursor --provider cursor --model composer-2.5-fast
+yadra configure credentials --profile cursor --token "…"
+
+# Quotidien : workspace auto-détecté (root.project.ksl / ksl/ + repo.path)
+yadra make prompts/ma-feature/
+```
+
+Pas besoin de `yadra project use` au quotidien. Détails : site doc → **Vue d’ensemble → Configuration minimale recommandée**, ou [`docs/yadra-cli.md`](docs/yadra-cli.md).
 
 ## Variables projet
 
-| Variable | Rôle |
-|----------|------|
-| `KSL_PROJECT_HOME` | Monorepo specs (`.project.ksl`, `.spec.ksl`) |
-| `PROJECT_HOME` | Code généré T2 |
-| `KSL_HOME` | Pack langage (`…/yadra/ksl` en dev monorepo ou vendor CLI) |
-| `YADRA_PROJECT_HOME` | Racine distribution (vendor ou `yadra/` en dev) |
+| Variable | Rôle | Quotidien |
+|----------|------|-----------|
+| `KSL_HOME` / `YADRA_PROJECT_HOME` | Pack langage / distribution | Auto (paquet CLI) |
+| `KSL_PROJECT_HOME` | Monorepo specs | Auto-detect depuis le path |
+| `PROJECT_HOME` | Code généré T2 | Auto via `repo.path` |
 
 Voir [`docs/yadra-cli.md`](docs/yadra-cli.md).

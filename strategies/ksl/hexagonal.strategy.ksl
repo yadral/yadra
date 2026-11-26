@@ -31,14 +31,17 @@ strategy "Hexagonal" {
     package "domain.model.<feature>" {
       role = "Entités, états et comportement métier."
     }
-    package "domain.api.<feature>" {
-      role = "Ports entrants exposant les cas d'usage."
+    package "domain.<feature>" {
+      role = "Ports entrants exposant les cas d'usage. Pas de segment api."
     }
     package "domain.workflow.api.<feature>" {
       role = "Services applicatifs implémentant les ports entrants."
     }
     package "domain.spi" {
-      role = "Ports sortants : persistence et systèmes externes."
+      role = "Ports sortants : persistence et systèmes externes. Signatures en modèle SPI uniquement."
+    }
+    package "domain.spi.<feature>" {
+      role = "Modèles du port sortant. Aucun import de domain.model, aucune annotation de persistence."
     }
     package "domain.validator" {
       role = "Validations métier appelées avant mutation ou effet externe."
@@ -48,6 +51,9 @@ strategy "Hexagonal" {
     }
     package "domain.mapper" {
       role = "Mapping structurel synchrone et sans orchestration."
+    }
+    package "domain.mapper.<feature>" {
+      role = "Extensions Kotlin .toDomain() : modèle SPI vers modèle domaine. Seul ce package importe les deux."
     }
     package "infrastructure.primary.rest" {
       role = "Adapters entrants REST ; délégation exclusive aux API."
@@ -71,9 +77,9 @@ strategy "Hexagonal" {
       responsibility = "Porter l'état et les transitions métier."
     }
     participant "InboundApi" {
-      path = "domain.api.<feature>.<Feature>Api"
+      path = "domain.<feature>.<Feature>Api"
       kind = "input_port"
-      responsibility = "Déclarer les opérations consommées par les adapters primary."
+      responsibility = "Déclarer les opérations consommées par les adapters primary. Package domain.<feature>, jamais domain.api."
     }
     participant "ApplicationService" {
       path = "domain.workflow.api.<feature>.<Feature>Service"
@@ -84,7 +90,17 @@ strategy "Hexagonal" {
       path = "domain.spi.<Entity>RepositorySpi"
       kind = "output_port"
       multiplicity = "one_or_more"
-      responsibility = "Déclarer les besoins sortants avec types métier."
+      responsibility = "Déclarer les besoins sortants avec le modèle SPI uniquement. Aucun type de domain.model dans la signature."
+    }
+    participant "SpiModel" {
+      path = "domain.spi.<feature>.<Entity>Spi"
+      kind = "spi_model"
+      responsibility = "Porter l'état échangé par OutboundSpi. Ne pas importer domain.model ni le mapper."
+    }
+    participant "SpiMapper" {
+      path = "domain.mapper.<feature>.<Entity>SpiMapper"
+      kind = "boundary_mapper"
+      responsibility = "Extensions Kotlin fun <Entity>Spi.toDomain(): <Entity>. Seul fichier autorisé à importer SpiModel et DomainModel ensemble."
     }
     participant "PrimaryAdapter" {
       path = "infrastructure.primary.rest.<Feature>RestController"
@@ -95,7 +111,7 @@ strategy "Hexagonal" {
       path = "infrastructure.secondary.<technology>.<Entity>RepositorySpiImpl"
       kind = "output_adapter"
       multiplicity = "one_or_more"
-      responsibility = "Implémenter OutboundSpi et déléguer au repository technique."
+      responsibility = "Implémenter OutboundSpi. Convertir l'entité technique vers SpiModel. Ne pas importer domain.model et ne pas appeler toDomain."
     }
     participant "TechnologyRepository" {
       path = "infrastructure.secondary.<technology>.repository.<Entity><Technology>Repository"
@@ -120,6 +136,11 @@ strategy "Hexagonal" {
     relation "PrimaryAdapter" -> "InboundApi" { type = "depends_on" }
     relation "ApplicationService" -> "InboundApi" { type = "implements" }
     relation "ApplicationService" -> "OutboundSpi" { type = "depends_on" }
+    relation "ApplicationService" -> "SpiMapper" { type = "depends_on" }
+    relation "OutboundSpi" -> "SpiModel" { type = "exposes" }
+    relation "SpiMapper" -> "SpiModel" { type = "reads" }
+    relation "SpiMapper" -> "DomainModel" { type = "produces" }
+    relation "SecondaryAdapter" -> "SpiModel" { type = "returns" }
     relation "ApplicationService" -> "Validator" { type = "depends_on_optional" }
     relation "ApplicationService" -> "ResponseConverter" { type = "depends_on_optional" }
     relation "SecondaryAdapter" -> "OutboundSpi" { type = "implements" }
@@ -132,8 +153,8 @@ strategy "Hexagonal" {
     step 2 { actor = "PrimaryAdapter" action = "Déléguer à InboundApi." }
     step 3 { actor = "ApplicationService" action = "Lire le contexte d'exécution." }
     step 4 { actor = "ApplicationService" action = "Exécuter Validator si présent." }
-    step 5 { actor = "ApplicationService" action = "Charger ou persister via OutboundSpi." }
-    step 6 { actor = "DomainModel" action = "Exécuter la transition métier." }
+    step 5 { actor = "ApplicationService" action = "Charger ou persister via OutboundSpi, puis SpiMapper.toDomain avant toute transition." }
+    step 6 { actor = "DomainModel" action = "Exécuter la transition métier sur le modèle domaine, jamais sur SpiModel." }
     step 7 { actor = "ApplicationService" action = "Convertir la réponse si nécessaire." }
   }
 
@@ -145,7 +166,9 @@ strategy "Hexagonal" {
       "PrimaryAdapter",
       "SecondaryAdapter",
       "TechnologyRepository",
-      "DomainModel"
+      "DomainModel",
+      "SpiModel",
+      "SpiMapper"
     ]
     optional = ["Validator", "ResponseConverter", "DTO", "Mapper"]
     naming = [
@@ -154,7 +177,9 @@ strategy "Hexagonal" {
       "<Entity>RepositorySpi",
       "<Entity>RepositorySpiImpl",
       "<Entity><Technology>Repository",
-      "<Feature>RestController"
+      "<Feature>RestController",
+      "<Entity>Spi",
+      "<Entity>SpiMapper"
     ]
     forbidden = [
       "PrimaryAdapter appelle SecondaryAdapter directement",
@@ -162,7 +187,11 @@ strategy "Hexagonal" {
       "Controller contient une transition métier",
       "SecondaryAdapter implémente un cas d'usage entrant",
       "Créer un package application distinct du profil Tontine",
-      "Renommer API/SPI/Impl sans demande explicite de la spec"
+      "Renommer API/SPI/Impl sans demande explicite de la spec",
+      "Placer InboundApi sous domain.api",
+      "SpiModel ou OutboundSpi importe domain.model",
+      "Déclarer toDomain dans le package domain.spi",
+      "SecondaryAdapter importe domain.model"
     ]
   }
 
@@ -173,7 +202,7 @@ strategy "Hexagonal" {
     dependency_injection = "constructor"
     annotations = "framework bindings remain at service and adapter boundaries"
     dto_policy = "InboundApi may expose REST DTOs, matching the existing Tontine codebase."
-    persistence_policy = "Domain models may carry persistence annotations, matching Tontine."
+    persistence_policy = "SpiModel stays free of domain and JPA types. The technical adapter maps to SpiModel. SpiMapper.toDomain produces the domain model."
   }
 
   tests {
@@ -214,8 +243,8 @@ public class Order {
   public static Order paid(CartId cartId) { /* transition PAID */ return new Order(); }
 }
 
-// --- domain.api.checkout.CheckoutApi (InboundApi) ---
-package <basePackage>.domain.api.checkout;
+// --- domain.checkout.CheckoutApi (InboundApi) ---
+package <basePackage>.domain.checkout;
 
 import <basePackage>.infrastructure.primary.rest.dto.checkout.CheckoutRequest;
 import <basePackage>.infrastructure.primary.rest.dto.checkout.CheckoutResponse;
@@ -239,17 +268,31 @@ public class CheckoutService implements CheckoutApi {
   public CheckoutResponse checkout(CheckoutRequest request) {
     validator.validate(request);
     paymentGateway.authorize(request.toPaymentCommand());
-    Order order = orderRepository.save(Order.paid(request.getCartId()));
+    Order order = orderRepository.save(OrderSpi.from(request.getCartId())).toDomain();
     outboxWriter.append(OrderPaidEvent.from(order));
     return orderConverter.convert(order);
   }
 }
 
-// --- domain.spi.* (OutboundSpi) ---
+// --- domain.spi.checkout.OrderSpi (SpiModel : aucun import domain.model) ---
+package <basePackage>.domain.spi.checkout;
+
+public class OrderSpi {
+  private String id;
+  public String getId() { return id; }
+}
+
+// --- domain.mapper.checkout.OrderSpiMapper (seul import croisé, Kotlin) ---
+// package <basePackage>.domain.mapper.checkout
+// import <basePackage>.domain.model.checkout.Order
+// import <basePackage>.domain.spi.checkout.OrderSpi
+// fun OrderSpi.toDomain(): Order = Order(/* champs du SpiModel */)
+
+// --- domain.spi.* (OutboundSpi : signatures en SpiModel) ---
 package <basePackage>.domain.spi;
 
 public interface OrderRepositorySpi {
-  Order save(Order order);
+  OrderSpi save(OrderSpi order);
 }
 
 public interface PaymentGatewaySpi {
@@ -304,8 +347,8 @@ public class OrderRepositorySpiImpl implements OrderRepositorySpi {
   private final OrderJpaRepository jpaRepository;
 
   @Override
-  public Order save(Order order) {
-    return jpaRepository.save(OrderEntity.from(order)).toDomain();
+  public OrderSpi save(OrderSpi order) {
+    return jpaRepository.save(OrderEntity.from(order)).toSpi();
   }
 }
 

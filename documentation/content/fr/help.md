@@ -46,7 +46,10 @@ Timeline 1 (T1):
   seal         Scellement T1 (.yadra/sealed/)
 
 Timeline 2 (T2):
-  plan         Plan de compilation depuis une spec (.spec.ksl) — dry-run
+  plan         Plan de compilation depuis une spec (.spec.ksl) — T2 · A
+  execute      Matérialisation sous PROJECT_HOME — T2 · B
+  gate         Conformance Gate — T2 · C
+  make         Une commande : T1 (formalize) → T2 (execute + gate)
   strategies   Catalogue interne des noms strategy (list / show)
 
 Exécutez "yadra <commande> -h" pour le détail.
@@ -60,7 +63,7 @@ yadra project -h
 
 `yadra project -h` décrit toutes les sous-commandes (`list`, `add`, `update`, `set-profile`, `use`, …), les options, les surcharges `--project` / variables d’environnement et un **exemple de flux multi-projets**.
 
-Documentation complète : page [`yadra project`](/docs/project/). Timeline 2 : [`yadra plan`](/docs/plan/), [`yadra strategies`](/docs/strategies/).
+Documentation complète : page [`yadra project`](/docs/project/). Chemin quotidien : [`yadra make`](/docs/make/). Timeline 2 : [`yadra plan`](/docs/plan/), [`yadra execute`](/docs/execute/), [`yadra strategies`](/docs/strategies/).
 
 ## Comportement des codes de sortie
 

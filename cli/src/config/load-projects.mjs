@@ -10,6 +10,10 @@ import {
   findRootProjectInDir,
   validateAndBuildContext,
 } from "../runtime/ksl-lib.mjs";
+import {
+  discoverWorkspaceFromPath,
+  projectHomeFromRootRepo,
+} from "./discover-workspace.mjs";
 import { assertProfileName } from "./load-configure.mjs";
 import { defaultYadraProjectHome } from "./manifest.mjs";
 import { projectsRegistryPath } from "./paths.mjs";
@@ -116,46 +120,153 @@ export function getProject(name) {
   return reg.projects[name] ?? null;
 }
 
+function findRegistryByKslHome(kslProjectHome) {
+  const target = resolve(kslProjectHome);
+  const reg = loadProjectsRegistry();
+  for (const [name, entry] of Object.entries(reg.projects)) {
+    if (resolve(entry.kslProjectHome) === target) {
+      return { name, entry };
+    }
+  }
+  return null;
+}
+
+function mergeLlm(baseLlm = {}) {
+  return {
+    ...baseLlm,
+    ...(process.env.YADRA_PROFILE
+      ? { profile: process.env.YADRA_PROFILE }
+      : {}),
+    ...(process.env[ENV_MODEL] ? { model: process.env[ENV_MODEL] } : {}),
+  };
+}
+
+/**
+ * Resolve KSL + app roots.
+ *
+ * Priority:
+ * 1. Explicit `--project` (`options.projectName`)
+ * 2. Explicit `--ksl-project-home` (`options.kslProjectHome`)
+ * 3. Auto-detect from `options.seedPath` or `cwd` (walk-up to root.project.ksl / ksl/)
+ * 4. Ambient `KSL_PROJECT_HOME` env
+ * 5. `YADRA_PROJECT` env or registry `current`
+ *
+ * `PROJECT_HOME`: `--project-home` / env / registry / `repo.path` in root KSL.
+ */
 export function resolveWorkspace(cwd = process.cwd(), options = {}) {
-  const projectName =
-    options.projectName ??
-    process.env[ENV_YADRA_PROJECT] ??
-    null;
+  const flagProjectName = options.projectName ?? null;
+  const seedPath = options.seedPath
+    ? resolve(cwd, options.seedPath)
+    : resolve(cwd);
+  const flagProjectHome = options.projectHome
+    ? absPath(cwd, options.projectHome)
+    : null;
 
   let base = null;
 
-  const envKsl =
-    process.env[ENV_KSL] ??
-    process.env[ENV_KSL_TOOL_ROOT] ??
-    process.env.YADRA_CONTEXT;
-
-  if (envKsl) {
-    base = normalizeProjectEntry({ kslProjectHome: envKsl }, "_env");
-  } else {
+  if (flagProjectName) {
     const reg = loadProjectsRegistry();
-    const name = projectName ?? reg.current;
+    if (reg.projects[flagProjectName]) {
+      base = {
+        ...reg.projects[flagProjectName],
+        name: flagProjectName,
+        source: "project",
+      };
+    }
+  }
+
+  if (!base && options.kslProjectHome) {
+    base = {
+      ...normalizeProjectEntry(
+        { kslProjectHome: absPath(cwd, options.kslProjectHome) },
+        "_flag",
+      ),
+      source: "flag-ksl",
+    };
+  }
+
+  if (!base) {
+    const detected = discoverWorkspaceFromPath(seedPath);
+    if (detected) {
+      const matched = findRegistryByKslHome(detected.kslProjectHome);
+      if (matched) {
+        base = {
+          ...matched.entry,
+          name: matched.name,
+          projectHome: matched.entry.projectHome ?? detected.projectHome,
+          rootProjectFile:
+            matched.entry.rootProjectFile ?? detected.rootProjectFile,
+          projectId: matched.entry.projectId ?? detected.projectId,
+          source: "detect+registry",
+        };
+      } else {
+        base = {
+          name: detected.projectId ?? "_detected",
+          kslProjectHome: detected.kslProjectHome,
+          projectHome: detected.projectHome,
+          yadraProjectHome: defaultYadraProjectHome(),
+          rootProjectFile: detected.rootProjectFile,
+          projectId: detected.projectId,
+          llm: {},
+          source: "detect",
+        };
+      }
+    }
+  }
+
+  if (!base) {
+    const envKsl =
+      process.env[ENV_KSL] ??
+      process.env[ENV_KSL_TOOL_ROOT] ??
+      process.env.YADRA_CONTEXT;
+    if (envKsl) {
+      base = {
+        ...normalizeProjectEntry({ kslProjectHome: envKsl }, "_env"),
+        source: "env",
+      };
+    }
+  }
+
+  if (!base) {
+    const reg = loadProjectsRegistry();
+    const name = process.env[ENV_YADRA_PROJECT] ?? reg.current;
     if (name && reg.projects[name]) {
-      base = { ...reg.projects[name], name };
+      base = {
+        ...reg.projects[name],
+        name,
+        source: process.env[ENV_YADRA_PROJECT] ? "env-project" : "current",
+      };
     }
   }
 
   if (!base) return null;
 
+  let projectHome = flagProjectHome;
+  if (
+    !projectHome &&
+    (base.source === "detect" || base.source === "detect+registry")
+  ) {
+    projectHome = base.projectHome;
+  }
+  if (!projectHome && process.env[ENV_PROJECT]) {
+    projectHome = resolve(process.env[ENV_PROJECT]);
+  }
+  if (!projectHome) {
+    projectHome = base.projectHome;
+  }
+  if (!projectHome) {
+    projectHome = projectHomeFromRootRepo(base.kslProjectHome, {
+      rootProjectFile: base.rootProjectFile,
+    });
+  }
+
   return {
     ...base,
-    projectHome: process.env[ENV_PROJECT]
-      ? resolve(process.env[ENV_PROJECT])
-      : base.projectHome,
+    projectHome: projectHome ?? null,
     yadraProjectHome: process.env[ENV_YADRA]
       ? resolve(process.env[ENV_YADRA])
-      : base.yadraProjectHome,
-    llm: {
-      ...(base.llm ?? {}),
-      ...(process.env.YADRA_PROFILE
-        ? { profile: process.env.YADRA_PROFILE }
-        : {}),
-      ...(process.env[ENV_MODEL] ? { model: process.env[ENV_MODEL] } : {}),
-    },
+      : base.yadraProjectHome ?? defaultYadraProjectHome(),
+    llm: mergeLlm(base.llm),
   };
 }
 
@@ -163,7 +274,7 @@ export function requireKslProjectHome(cwd = process.cwd(), options = {}) {
   const ws = resolveWorkspace(cwd, options);
   if (!ws?.kslProjectHome) {
     throw new Error(
-      "No active Yadra project. Run: yadra project add <name> … then yadra project use <name>",
+      "No Yadra workspace found. Run from a product tree (or pass a path under one with root.project.ksl / ksl/), or register one: yadra project add <name> --ksl-project-home … --project-home …",
     );
   }
   if (!existsSync(ws.kslProjectHome)) {
